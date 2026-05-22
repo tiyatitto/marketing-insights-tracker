@@ -1,0 +1,59 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isUserDisabled() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.disabled == true;
+    }
+
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAuthenticated() && isAdmin();
+    }
+
+    // Reports Collection
+    match /reports/{reportId} {
+      // Admin can read all reports
+      // Staff can read their own reports
+      allow read: if isAuthenticated() && (isAdmin() || resource.data.creatorId == request.auth.uid);
+      
+      // Staff and Admin can create reports if they are not disabled
+      allow create: if isAuthenticated() && 
+                    !isUserDisabled() && 
+                    request.resource.data.creatorId == request.auth.uid;
+      
+      // Staff can update their own reports, Admin can update any
+      allow update: if isAuthenticated() && 
+                    !isUserDisabled() && 
+                    (isAdmin() || resource.data.creatorId == request.auth.uid);
+      
+      // Admin can delete any, staff can delete their own
+      allow delete: if isAuthenticated() && 
+                    !isUserDisabled() && 
+                    (isAdmin() || resource.data.creatorId == request.auth.uid);
+    }
+
+    // Organizations Collection
+    match /organizations/{orgId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && !isUserDisabled();
+      allow delete: if isAuthenticated() && isAdmin();
+    }
+
+    // Counters Collection
+    match /counters/{counterId} {
+      allow read, write: if isAuthenticated() && !isUserDisabled();
+    }
+  }
+}

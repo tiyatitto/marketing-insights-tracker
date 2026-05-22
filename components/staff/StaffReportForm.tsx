@@ -2,31 +2,24 @@ import React from "react";
 import { motion } from "framer-motion";
 import { FormField } from "../ui/FormField";
 import { FormTextArea } from "../ui/FormTextArea";
+import { MeetingsActivityForm } from "./MeetingsActivityForm";
 
 interface StaffReportFormProps {
     activityType: string;
     formData: any;
-    handleInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+    handleInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
+    setFormData: React.Dispatch<React.SetStateAction<any>>;
 }
 
-export function StaffReportForm({ activityType, formData, handleInputChange }: StaffReportFormProps) {
+export function StaffReportForm({ activityType, formData, handleInputChange, setFormData }: StaffReportFormProps) {
     switch (activityType) {
-        case "Meetings with Institutes":
+        case "Meeting with Organization":
             return (
-                <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-                        <FormField label="Institution Name" name="institutionName" value={formData.institutionName || ""} onChange={handleInputChange} />
-                        <FormField label="Location" name="location" value={formData.location || ""} onChange={handleInputChange} />
-                        <FormField label="Number of Final Year Students" type="number" name="numStudents" value={formData.numStudents || ""} onChange={handleInputChange} />
-                        <FormField label="Head of Institute" name="headOfInstitute" value={formData.headOfInstitute || ""} onChange={handleInputChange} />
-                        <FormField label="Head Contact" name="headContact" value={formData.headContact || ""} onChange={handleInputChange} />
-                        <FormField label="SPOC from Institute" name="spocName" value={formData.spocName || ""} onChange={handleInputChange} />
-                        <FormField label="SPOC Contact" name="spocContact" value={formData.spocContact || ""} onChange={handleInputChange} />
-                        <FormField label="SPOC Email" type="email" name="spocEmail" value={formData.spocEmail || ""} onChange={handleInputChange} />
-                        <FormField label="Cost of Visit ($)" type="number" name="costOfVisit" value={formData.costOfVisit || ""} onChange={handleInputChange} />
-                    </div>
-                    <FormTextArea label="Marketing Observation" name="marketingObservation" value={formData.marketingObservation || ""} onChange={handleInputChange} />
-                </motion.div>
+                <MeetingsActivityForm
+                    formData={formData}
+                    handleInputChange={handleInputChange}
+                    setFormData={setFormData}
+                />
             );
         case "Follow up with Institutes":
         case "Follow up with Hospitals":
@@ -67,24 +60,6 @@ export function StaffReportForm({ activityType, formData, handleInputChange }: S
                         <FormField label="Number of Participants" type="number" name="numParticipants" value={formData.numParticipants || ""} onChange={handleInputChange} />
                         <FormField label="Footfalls of Participants" type="number" name="footfalls" value={formData.footfalls || ""} onChange={handleInputChange} />
                         <FormField label="Number of Registrations" type="number" name="numRegistrations" value={formData.numRegistrations || ""} onChange={handleInputChange} />
-                        <FormField label="Cost of Visit ($)" type="number" name="costOfVisit" value={formData.costOfVisit || ""} onChange={handleInputChange} />
-                    </div>
-                    <FormTextArea label="Marketing Observation" name="marketingObservation" value={formData.marketingObservation || ""} onChange={handleInputChange} />
-                </motion.div>
-            );
-        case "Meetings with Hospitals":
-            return (
-                <motion.div initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-                        <FormField label="Hospital Name" name="hospitalName" value={formData.hospitalName || ""} onChange={handleInputChange} />
-                        <FormField label="Location" name="location" value={formData.location || ""} onChange={handleInputChange} />
-                        <FormField label="Number of Beds" type="number" name="numBeds" value={formData.numBeds || ""} onChange={handleInputChange} />
-                        <FormField label="Number of Employees" type="number" name="numEmployees" value={formData.numEmployees || ""} onChange={handleInputChange} />
-                        <FormField label="Head of Hospital" name="headOfHospital" value={formData.headOfHospital || ""} onChange={handleInputChange} />
-                        <FormField label="Contact" name="contact" value={formData.contact || ""} onChange={handleInputChange} />
-                        <FormField label="Head of HR" name="headOfHR" value={formData.headOfHR || ""} onChange={handleInputChange} />
-                        <FormField label="HR Contact" name="hrContact" value={formData.hrContact || ""} onChange={handleInputChange} />
-                        <FormField label="Email Contact" type="email" name="emailContact" value={formData.emailContact || ""} onChange={handleInputChange} />
                         <FormField label="Cost of Visit ($)" type="number" name="costOfVisit" value={formData.costOfVisit || ""} onChange={handleInputChange} />
                     </div>
                     <FormTextArea label="Marketing Observation" name="marketingObservation" value={formData.marketingObservation || ""} onChange={handleInputChange} />

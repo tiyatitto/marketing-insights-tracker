@@ -1,65 +1,138 @@
-import React from "react";
-import { CheckCircle2, Clock, XCircle } from "lucide-react";
+"use client";
 
-interface Report {
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { LayoutGrid, List } from "lucide-react";
+
+export interface StaffReport {
     id: string;
     activity: string;
     name: string;
     cost: string;
     date: string;
-    status: string;
+    eventDate?: string;
+    observation?: string;
 }
 
 interface StaffReportTableProps {
-    submissions: Report[];
+    submissions: StaffReport[];
 }
 
 export function StaffReportTable({ submissions }: StaffReportTableProps) {
+    const [viewMode, setViewMode] = useState<"table" | "card">("table");
+
     return (
-        <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
-                <thead className="bg-slate-50/80 text-xs uppercase font-semibold text-slate-500">
-                    <tr>
-                        <th className="px-6 py-4">Activity Type</th>
-                        <th className="px-6 py-4">Institution / Hospital</th>
-                        <th className="px-6 py-4">Date</th>
-                        <th className="px-6 py-4">Cost ($)</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4 text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                    {submissions.length > 0 ? submissions.map((sub) => (
-                        <tr key={sub.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-6 py-4 font-medium text-slate-900">{sub.activity}</td>
-                            <td className="px-6 py-4">{sub.name}</td>
-                            <td className="px-6 py-4">{sub.date}</td>
-                            <td className="px-6 py-4 font-medium">${sub.cost}</td>
-                            <td className="px-6 py-4">
-                                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold
-                                    ${sub.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : 
-                                    sub.status === 'Pending' ? 'bg-amber-50 text-amber-700' : 
-                                    'bg-rose-50 text-rose-700'}`}>
-                                    {sub.status === 'Approved' && <CheckCircle2 className="w-3.5 h-3.5" />}
-                                    {sub.status === 'Pending' && <Clock className="w-3.5 h-3.5" />}
-                                    {sub.status === 'Rejected' && <XCircle className="w-3.5 h-3.5" />}
-                                    {sub.status}
-                                </span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                                <button className="text-indigo-600 hover:text-indigo-900 font-medium text-sm">Edit</button>
-                                <button className="text-rose-600 hover:text-rose-900 font-medium text-sm ml-3">Delete</button>
-                            </td>
-                        </tr>
-                    )) : (
-                        <tr>
-                            <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+        <div className="flex flex-col w-full">
+            {/* View Toggle */}
+            <div className="flex justify-end px-6 py-4 bg-slate-50/50 border-b border-slate-100">
+                <div className="bg-white border border-slate-200 rounded-lg p-1 flex gap-1 shadow-sm">
+                    <button 
+                        onClick={() => setViewMode("table")}
+                        className={`p-1.5 rounded-md flex items-center justify-center transition-colors ${viewMode === "table" ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"}`}
+                        title="Table View"
+                    >
+                        <List className="w-4 h-4" />
+                    </button>
+                    <button 
+                        onClick={() => setViewMode("card")}
+                        className={`p-1.5 rounded-md flex items-center justify-center transition-colors ${viewMode === "card" ? "bg-indigo-50 text-indigo-600" : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"}`}
+                        title="Card View"
+                    >
+                        <LayoutGrid className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+
+            <AnimatePresence mode="wait">
+                {viewMode === "table" ? (
+                    <motion.div 
+                        key="table"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="overflow-x-auto w-full"
+                    >
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-slate-50/80 text-xs uppercase font-semibold text-slate-500">
+                                <tr>
+                                    <th className="px-6 py-4 whitespace-nowrap">Report ID</th>
+                                    <th className="px-6 py-4">Activity / Organization</th>
+                                    <th className="px-6 py-4 whitespace-nowrap">Created Date</th>
+                                    <th className="px-6 py-4 whitespace-nowrap text-right">Event & Cost</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                                {submissions.length > 0 ? submissions.map((report) => (
+                                    <tr key={report.id} className="hover:bg-slate-50/50 transition-colors group">
+                                        <td className="px-6 py-4 font-bold text-slate-900">{report.id}</td>
+                                        <td className="px-6 py-4">
+                                            <div className="font-medium text-slate-900">{report.name}</div>
+                                            <div className="text-slate-500 text-xs mt-0.5">{report.activity}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="text-slate-600">{report.date}</div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="font-bold text-emerald-600">₹{parseFloat(report.cost).toLocaleString()}</div>
+                                            <div className="text-slate-500 text-xs mt-0.5">{report.eventDate || "N/A"}</div>
+                                        </td>
+                                    </tr>
+                                )) : (
+                                    <tr>
+                                        <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
+                                            No reports found matching your criteria.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </motion.div>
+                ) : (
+                    <motion.div 
+                        key="card"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 bg-slate-50/30"
+                    >
+                        {submissions.length > 0 ? submissions.map((report) => (
+                            <motion.div 
+                                whileHover={{ y: -4, scale: 1.01 }}
+                                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                                key={report.id} 
+                                className="bg-white/80 backdrop-blur-sm border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col"
+                            >
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg tracking-wider border border-indigo-100/50">
+                                        {report.id}
+                                    </span>
+                                    <div className="text-right">
+                                        <div className="font-bold text-emerald-600 text-lg">₹{parseFloat(report.cost).toLocaleString()}</div>
+                                        <div className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 mt-0.5">Event: {report.eventDate || "N/A"}</div>
+                                    </div>
+                                </div>
+                                
+                                <h3 className="font-bold text-slate-900 text-lg mb-1 line-clamp-1">{report.name}</h3>
+                                <p className="text-slate-500 text-sm font-medium mb-4">{report.activity}</p>
+                                
+                                {report.observation && (
+                                    <div className="bg-slate-50 rounded-xl p-3 mb-4 flex-1">
+                                        <p className="text-xs text-slate-600 line-clamp-3 italic leading-relaxed">"{report.observation}"</p>
+                                    </div>
+                                )}
+                                
+                                <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-end">
+                                    <span className="text-xs text-slate-400 font-medium">Logged: {report.date}</span>
+                                </div>
+                            </motion.div>
+                        )) : (
+                            <div className="col-span-full py-12 text-center text-slate-500">
                                 No reports found matching your criteria.
-                            </td>
-                        </tr>
-                    )}
-                </tbody>
-            </table>
+                            </div>
+                        )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

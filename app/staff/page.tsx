@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { auth, db } from "../../lib/firebase";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { collection, query, where, onSnapshot, doc, setDoc, addDoc, runTransaction, serverTimestamp } from "firebase/firestore";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
     LayoutDashboard, 
@@ -19,13 +22,13 @@ import { StatCard } from "../../components/ui/StatCard";
 import { SearchInput } from "../../components/ui/SearchInput";
 import { StaffReportTable } from "../../components/staff/StaffReportTable";
 import { StaffReportForm } from "../../components/staff/StaffReportForm";
+import { ExpenseTracker } from "../../components/analytics/ExpenseTracker";
 
 type ActivityType = 
-    | "Meetings with Institutes"
+    | "Meeting with Organization"
     | "Follow up with Institutes"
     | "Campaigns Conducted"
     | "Participation in Conferences"
-    | "Meetings with Hospitals"
     | "Follow up with Hospitals";
 
 export default function StaffDashboard() {
@@ -35,16 +38,44 @@ export default function StaffDashboard() {
     const [filterActivity, setFilterActivity] = useState("All");
     
     // Dynamic Form State
-    const [activityType, setActivityType] = useState<ActivityType>("Meetings with Institutes");
+    const [activityType, setActivityType] = useState<ActivityType>("Meeting with Organization");
     const [formData, setFormData] = useState<any>({});
     
-    // Mock Data State
-    const [submissions, setSubmissions] = useState([
-        { id: "REP-101", activity: "Meetings with Institutes", name: "Riverside High", cost: "500", date: "May 14, 2026", status: "Pending" },
-        { id: "REP-102", activity: "Follow up with Hospitals", name: "City Care", cost: "120", date: "May 12, 2026", status: "Approved" },
-        { id: "REP-103", activity: "Campaigns Conducted", name: "Tech University", cost: "850", date: "May 10, 2026", status: "Approved" },
-        { id: "REP-104", activity: "Participation in Conferences", name: "Edu Summit 2026", cost: "1200", date: "May 08, 2026", status: "Rejected" },
-    ]);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [submissions, setSubmissions] = useState<any[]>([]);
+
+    useEffect(() => {
+        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                setCurrentUser(user);
+                
+                const q = query(
+                    collection(db, "reports"), 
+                    where("creatorId", "==", user.uid)
+                );
+                
+                const unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
+                    const fetchedReports = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data(),
+                        date: doc.data().createdAt?.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) || "Just now",
+                        eventDate: doc.data().formData?.eventDate || doc.data().formData?.meetingDate || doc.data().formData?.date || "",
+                        observation: doc.data().formData?.observation || doc.data().formData?.remarks || doc.data().formData?.marketingObservation || doc.data().formData?.marketingConclusion || "",
+                        timestamp: doc.data().createdAt?.toMillis() || Date.now()
+                    })).sort((a, b) => b.timestamp - a.timestamp);
+                    setSubmissions(fetchedReports);
+                    setIsLoading(false);
+                });
+
+                return () => unsubscribeSnapshot();
+            } else {
+                window.location.href = "/login";
+            }
+        });
+
+        return () => unsubscribeAuth();
+    }, []);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -56,20 +87,61 @@ export default function StaffDashboard() {
         setFormData({});
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const newReport = {
-            id: `REP-${Math.floor(Math.random() * 1000) + 200}`,
-            activity: activityType,
-            name: formData.institutionName || formData.hospitalName || formData.conferenceName || formData.institution || "N/A",
-            cost: formData.costOfVisit || "0",
-            date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-            status: "Pending"
-        };
-        setSubmissions([newReport, ...submissions]);
-        alert("Report submitted successfully!");
-        setFormData({});
-        setActiveTab("dashboard");
+        
+        if (!currentUser) return;
+        
+        // Validate that form has required data
+        if (activityType === "Meeting with Organization" && !formData.meetingType) {
+            alert("Please select a meeting type (Institution or Hospital)");
+            return;
+        }
+
+        try {
+            const counterRef = doc(db, "counters", "reports");
+            const newReportId = await runTransaction(db, async (transaction) => {
+                const counterDoc = await transaction.get(counterRef);
+                let nextSeq = 1;
+                if (counterDoc.exists()) {
+                    nextSeq = counterDoc.data().seq + 1;
+                }
+                transaction.set(counterRef, { seq: nextSeq }, { merge: true });
+                return `R${nextSeq.toString().padStart(3, '0')}`;
+            });
+
+            if (activityType === "Meeting with Organization" && formData.meetingType && !formData.organizationId) {
+                const orgName = formData.institutionName || formData.hospitalName;
+                if (orgName) {
+                    await addDoc(collection(db, "organizations"), {
+                        organizationType: formData.meetingType,
+                        organizationName: orgName,
+                        location: formData.location || "",
+                        commonDetails: formData,
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp()
+                    });
+                }
+            }
+
+            await setDoc(doc(db, "reports", newReportId), {
+                creatorId: currentUser.uid,
+                creatorName: currentUser.displayName || currentUser.email?.split("@")[0] || "Staff User",
+                creatorEmail: currentUser.email,
+                activity: activityType,
+                name: formData.institutionName || formData.hospitalName || formData.conferenceName || formData.institution || "N/A",
+                cost: formData.costOfVisit || "0",
+                status: "Pending",
+                createdAt: serverTimestamp(),
+                formData: formData
+            });
+            
+            alert("Report submitted successfully!");
+            setFormData({});
+            setActiveTab("dashboard");
+        } catch (error: any) {
+            alert("Error submitting report: " + error.message);
+        }
     };
 
     const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
@@ -98,6 +170,7 @@ export default function StaffDashboard() {
                     items={[
                         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, onClick: () => setActiveTab("dashboard") },
                         { id: "create", label: "Create Report", icon: PlusCircle, onClick: () => setActiveTab("create") },
+                        { id: "expense", label: "Expense Tracker", icon: DollarSign, onClick: () => setActiveTab("expense") },
                         { id: "history", label: "My Reports", icon: History, onClick: () => setActiveTab("dashboard") },
                         { id: "stats", label: "Statistics", icon: PieChart }
                     ]}
@@ -108,12 +181,17 @@ export default function StaffDashboard() {
                     searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
                     searchPlaceholder="Search everything..."
-                    userName="Jane Staff"
+                    userName={currentUser?.displayName || currentUser?.email?.split("@")[0] || "Staff User"}
                     userRole="Marketing Rep"
                 />
             }
         >
-            <AnimatePresence mode="wait">
+            {isLoading ? (
+                <div className="flex h-full items-center justify-center">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent"></div>
+                </div>
+            ) : (
+                <AnimatePresence mode="wait">
                 {activeTab === "dashboard" ? (
                     <motion.div 
                         key="dashboard"
@@ -142,17 +220,33 @@ export default function StaffDashboard() {
                                         className="py-2 pl-3 pr-8 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                                     >
                                         <option value="All">All Activities</option>
-                                        <option value="Meetings with Institutes">Meetings with Institutes</option>
+                                        <option value="Meeting with Organization">Meeting with Organization</option>
                                         <option value="Follow up with Institutes">Follow up with Institutes</option>
                                         <option value="Campaigns Conducted">Campaigns Conducted</option>
                                         <option value="Participation in Conferences">Participation in Conferences</option>
-                                        <option value="Meetings with Hospitals">Meetings with Hospitals</option>
                                         <option value="Follow up with Hospitals">Follow up with Hospitals</option>
                                     </select>
                                 </div>
                             </div>
                             <StaffReportTable submissions={filteredSubmissions} />
                         </div>
+                    </motion.div>
+                ) : activeTab === "expense" ? (
+                    <motion.div 
+                        key="expense"
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        transition={{ duration: 0.2 }}
+                        className="mx-auto max-w-6xl space-y-6"
+                    >
+                        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                            <div>
+                                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Expense Tracker</h1>
+                                <p className="text-sm text-slate-500 mt-1 font-medium">Monitor your personal marketing expenditures and budget utilization.</p>
+                            </div>
+                        </div>
+                        <ExpenseTracker reports={submissions} isAdmin={false} />
                     </motion.div>
                 ) : (
                     <motion.div 
@@ -178,17 +272,21 @@ export default function StaffDashboard() {
                                             onChange={handleActivityChange}
                                             className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-medium"
                                         >
-                                            <option value="Meetings with Institutes">Meetings with Institutes</option>
+                                            <option value="Meeting with Organization">Meeting with Organization</option>
                                             <option value="Follow up with Institutes">Follow up with Institutes</option>
                                             <option value="Campaigns Conducted">Campaigns Conducted</option>
                                             <option value="Participation in Conferences">Participation in Conferences</option>
-                                            <option value="Meetings with Hospitals">Meetings with Hospitals</option>
                                             <option value="Follow up with Hospitals">Follow up with Hospitals</option>
                                         </select>
                                     </div>
 
                                     <div className="space-y-6">
-                                        <StaffReportForm activityType={activityType} formData={formData} handleInputChange={handleInputChange} />
+                                        <StaffReportForm
+                                            activityType={activityType}
+                                            formData={formData}
+                                            handleInputChange={handleInputChange}
+                                            setFormData={setFormData}
+                                        />
                                     </div>
 
                                     <div className="mt-10 flex items-center justify-end gap-4 border-t border-slate-100 pt-6">
@@ -218,6 +316,7 @@ export default function StaffDashboard() {
                     </motion.div>
                 )}
             </AnimatePresence>
+            )}
         </DashboardLayout>
     );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
@@ -32,6 +32,13 @@ export default function LoginPage() {
             if (!querySnapshot.empty) {
                 const userData = querySnapshot.docs[0].data();
                 
+                if (userData.disabled === true) {
+                    await signOut(auth);
+                    setErrorMsg("Account disabled. Contact administrator.");
+                    setIsLoading(false);
+                    return;
+                }
+
                 // Firebase dictates the truth, overriding selectedRole
                 if (userData.role === "admin") {
                     router.push("/admin");
