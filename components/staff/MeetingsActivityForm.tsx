@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { FormField } from "../ui/FormField";
 import { FormTextArea } from "../ui/FormTextArea";
 import { db } from "../../lib/firebase";
 import { collection, query, onSnapshot } from "firebase/firestore";
+import { CheckCircle2, ChevronDown, ChevronUp, Edit2, MapPin, Building2, UserCircle } from "lucide-react";
 
 interface MeetingsActivityFormProps {
   formData: any;
@@ -22,6 +23,12 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [availableOrganizations, setAvailableOrganizations] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  
+  // New States for UX Enhancements
+  const [isDetailsCollapsed, setIsDetailsCollapsed] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch organizations from Firestore
   useEffect(() => {
@@ -32,6 +39,14 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
     });
     return () => unsubscribe();
   }, []);
+
+  // Debounce search query
+  useEffect(() => {
+    const handler = setTimeout(() => {
+        setDebouncedQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
   // Filter organizations based on meetingType
   useEffect(() => {
@@ -52,6 +67,8 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
     setMeetingType(type);
     setSelectedOrganizationId("");
     setSearchQuery("");
+    setIsDetailsCollapsed(false);
+    setSelectedIndex(-1);
     
     // Clear form data
     setFormData({});
@@ -62,6 +79,8 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
     setSearchQuery(e.target.value);
     setSelectedOrganizationId("");
     setShowDropdown(true);
+    setIsDetailsCollapsed(false);
+    setSelectedIndex(-1);
     
     // Auto-update the typed name to the new form data so it's saved as "New Organization" if not selected
     if (meetingType === "Institution") {
@@ -75,6 +94,7 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
     setSelectedOrganizationId(org.id);
     setSearchQuery(org.organizationName);
     setShowDropdown(false);
+    setSelectedIndex(-1);
 
     // Auto-fill fields
     const newFormData: any = { ...formData };
@@ -82,37 +102,87 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
     newFormData.organizationId = org.id;
     newFormData.isNewOrganization = false;
 
+    if (meetingType === "Institution") newFormData.institutionName = org.organizationName;
+    if (meetingType === "Hospital") newFormData.hospitalName = org.organizationName;
+
     if (org.commonDetails) {
         Object.keys(org.commonDetails).forEach(key => {
-            // Don't override cost, observation, and specific meeting fields
-            if (!["costOfVisit", "marketingObservation", "marketingConclusion", "feedback", "personOfContact"].includes(key)) {
+            // Don't override report-specific dynamic fields
+            if (!["costOfVisit", "marketingObservation", "marketingConclusion", "feedback", "personOfContact", "eventDate"].includes(key)) {
                 newFormData[key] = org.commonDetails[key];
             }
         });
     }
 
     setFormData(newFormData);
+    setIsDetailsCollapsed(true); // Auto-collapse the static data!
   };
 
   const handleCreateNew = () => {
     setShowDropdown(false);
     setSelectedOrganizationId("");
-    // Ensure form is set to treat this as a new org
-    const newFormData: any = { ...formData, isNewOrganization: true };
+    setIsDetailsCollapsed(false);
+    
+    // Clean stale autofilled data, preserve new state
+    const newFormData: any = { 
+        meetingType: meetingType,
+        isNewOrganization: true 
+    };
+    
+    const cleanName = searchQuery.trim();
+    if (meetingType === "Institution") newFormData.institutionName = cleanName;
+    if (meetingType === "Hospital") newFormData.hospitalName = cleanName;
+    
     setFormData(newFormData);
   };
 
+  // Keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showDropdown) return;
+    
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev < filteredOrgs.length - 1 ? prev + 1 : prev));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev > 0 ? prev - 1 : -1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (selectedIndex >= 0 && selectedIndex < filteredOrgs.length) {
+        handleOrganizationSelect(filteredOrgs[selectedIndex]);
+      } else if (searchQuery.trim().length > 0) {
+        handleCreateNew();
+      }
+    } else if (e.key === "Escape") {
+      setShowDropdown(false);
+    }
+  };
+
   const isFieldEmpty = (fieldName: string) => {
-      // Return true if the field is expected to be filled but is empty (to apply glow)
-      return selectedOrganizationId && !formData[fieldName];
+      // Glow if an organization is selected OR if it's a new organization flow, and the field is missing
+      return (selectedOrganizationId || formData.isNewOrganization) && !formData[fieldName];
   };
 
-  const getGlowClass = (fieldName: string) => {
-      return isFieldEmpty(fieldName) ? "ring-2 ring-indigo-400 border-indigo-400 bg-indigo-50/30" : "";
-  };
+  // Sort dropdown: Exact matches first, then by recency (createdAt), then alphabetically
+  const cleanSearch = debouncedQuery.toLowerCase().trim();
+  const filteredOrgs = availableOrganizations
+    .filter(org => org.organizationName?.toLowerCase().includes(cleanSearch))
+    .sort((a, b) => {
+        const aExact = a.organizationName?.toLowerCase().trim() === cleanSearch;
+        const bExact = b.organizationName?.toLowerCase().trim() === cleanSearch;
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        
+        // Sort by recency (createdAt desc)
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        if (timeB !== timeA) return timeB - timeA;
+        
+        return a.organizationName?.localeCompare(b.organizationName);
+    });
 
-  const filteredOrgs = availableOrganizations.filter(org => 
-      org.organizationName?.toLowerCase().includes(searchQuery.toLowerCase())
+  const exactMatchExists = availableOrganizations.some(
+      org => org.organizationName?.toLowerCase().trim() === searchQuery.toLowerCase().trim()
   );
 
   return (
@@ -152,6 +222,7 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
             value={searchQuery}
             onChange={handleSearchChange}
             onFocus={() => setShowDropdown(true)}
+            onKeyDown={handleKeyDown}
             placeholder={`Type to search or add new ${meetingType.toLowerCase()}...`}
             className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-medium relative z-50"
           />
@@ -161,20 +232,21 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
                 <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)}></div>
                 <motion.div 
                     initial={{opacity: 0, y: -10}} animate={{opacity: 1, y: 0}} exit={{opacity: 0, y: -10}}
-                    className="absolute z-50 mt-2 left-5 right-5 max-h-60 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl"
+                    className="absolute z-50 mt-2 left-5 right-5 max-h-60 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl flex flex-col"
+                    ref={dropdownRef}
                 >
                   {filteredOrgs.length > 0 ? (
                       <>
-                        <div className="px-4 py-2 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider">Suggested matches</div>
-                        {filteredOrgs.map((org) => (
+                        <div className="px-4 py-2 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-100 z-10">Suggested matches</div>
+                        {filteredOrgs.map((org, index) => (
                             <button
                             key={org.id}
                             type="button"
                             onClick={() => handleOrganizationSelect(org)}
-                            className="w-full text-left px-4 py-3 hover:bg-indigo-50 transition-colors border-b border-slate-100 last:border-0"
+                            className={`w-full text-left px-4 py-3 transition-colors border-b border-slate-100 last:border-0 ${selectedIndex === index ? "bg-indigo-50 border-l-4 border-l-indigo-500" : "hover:bg-slate-50 border-l-4 border-l-transparent"}`}
                             >
                             <span className="font-semibold text-slate-900">{org.organizationName}</span>
-                            <span className="block text-xs text-slate-500 mt-0.5">{org.location || "No location set"}</span>
+                            <span className="block text-xs text-slate-500 mt-0.5 flex items-center gap-1"><MapPin className="w-3 h-3"/> {org.location || "No location set"}</span>
                             </button>
                         ))}
                       </>
@@ -184,70 +256,145 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
                         No similar organizations found.
                     </div>
                   )}
-                  <button 
-                      type="button"
-                      onClick={handleCreateNew}
-                      className="w-full text-left px-4 py-3 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors sticky bottom-0 font-semibold flex items-center gap-2 shadow-lg"
-                  >
-                      <span>+</span> Continue with "{searchQuery}" as New {meetingType}
-                  </button>
+                  {!exactMatchExists && (
+                      <button 
+                          type="button"
+                          onClick={handleCreateNew}
+                          className={`w-full text-left px-4 py-3 bg-indigo-600 text-white transition-colors sticky bottom-0 font-semibold flex items-center gap-2 shadow-lg ${selectedIndex === -1 && filteredOrgs.length === 0 ? "bg-indigo-700" : "hover:bg-indigo-700"}`}
+                      >
+                          <span>+</span> Continue with "{searchQuery.trim()}" as New {meetingType}
+                      </button>
+                  )}
                 </motion.div>
                 </>
               )}
           </AnimatePresence>
-          <p className="mt-2 text-xs text-slate-600">
-            💡 Selecting an existing organization will auto-fill common details. Empty highlighted fields require your input.
-          </p>
         </motion.div>
       )}
 
       {/* Forms Content */}
-      <div className="relative z-10">
-      {meetingType === "Institution" && (
+      <div className="relative z-10 space-y-6">
+      
+      {/* ---------------- INSTITUTION FORM ---------------- */}
+      {meetingType === "Institution" && selectedOrganizationId && isDetailsCollapsed && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-5 bg-white/80 backdrop-blur-xl rounded-2xl border border-indigo-100 shadow-md">
+              <div className="flex justify-between items-start mb-4">
+                  <div>
+                      <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                          <Building2 className="w-5 h-5 text-indigo-500" /> {formData.institutionName}
+                      </h3>
+                      <p className="text-sm text-slate-500 flex items-center gap-1 mt-1"><MapPin className="w-4 h-4"/> {formData.location}</p>
+                  </div>
+                  <button type="button" onClick={() => setIsDetailsCollapsed(false)} className="text-xs font-semibold flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors">
+                      <Edit2 className="w-3 h-3" /> Edit Details
+                  </button>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-2 text-sm text-slate-700">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> {formData.numStudents || 0} Students
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-slate-700">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> SPOC: {formData.spocName || "N/A"}
+                  </div>
+              </div>
+          </motion.div>
+      )}
+
+      {meetingType === "Institution" && (!isDetailsCollapsed || !selectedOrganizationId) && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-indigo-200">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="h-1 w-1 bg-indigo-600 rounded-full"></div>
-            <h3 className="text-sm font-bold text-indigo-900">Institution Details</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+                <div className="h-1 w-1 bg-indigo-600 rounded-full"></div>
+                <h3 className="text-sm font-bold text-indigo-900">Institution Details</h3>
+            </div>
+            {selectedOrganizationId && (
+                <button type="button" onClick={() => setIsDetailsCollapsed(true)} className="text-xs font-semibold flex items-center gap-1 px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors">
+                    <ChevronUp className="w-3 h-3" /> Collapse
+                </button>
+            )}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 space-y-4 md:space-y-0">
-            <div className={getGlowClass("location")}><FormField label="Location" name="location" value={formData.location || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("numStudents")}><FormField label="Number of Final Year Students" type="number" name="numStudents" value={formData.numStudents || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("headOfInstitute")}><FormField label="Head of Institution" name="headOfInstitute" value={formData.headOfInstitute || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("headContact")}><FormField label="Head Contact" name="headContact" value={formData.headContact || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("spocName")}><FormField label="SPOC Name" name="spocName" value={formData.spocName || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("spocContact")}><FormField label="SPOC Contact" name="spocContact" value={formData.spocContact || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("spocEmail")}><FormField label="SPOC Email" type="email" name="spocEmail" value={formData.spocEmail || ""} onChange={handleInputChange} /></div>
-            <div><FormField label="Meeting Date" type="date" name="eventDate" value={formData.eventDate || ""} onChange={handleInputChange} /></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            <FormField label="Location" name="location" value={formData.location || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("location")} />
+            <FormField label="Number of Final Year Students" type="number" name="numStudents" value={formData.numStudents || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("numStudents")} />
+            <FormField label="Head of Institution" name="headOfInstitute" value={formData.headOfInstitute || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("headOfInstitute")} />
+            <FormField label="Head Contact" name="headContact" value={formData.headContact || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("headContact")} />
+            <FormField label="SPOC Name" name="spocName" value={formData.spocName || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("spocName")} />
+            <FormField label="SPOC Contact" name="spocContact" value={formData.spocContact || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("spocContact")} />
+            <FormField label="SPOC Email" type="email" name="spocEmail" value={formData.spocEmail || ""} onChange={handleInputChange} />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 space-y-4 md:space-y-0 mt-4">
-            <div><FormField label="Cost of Visit ($)" type="number" name="costOfVisit" value={formData.costOfVisit || ""} onChange={handleInputChange} /></div>
-          </div>
-          <div className="mt-4"><FormTextArea label="Marketing Observation" name="marketingObservation" value={formData.marketingObservation || ""} onChange={handleInputChange} /></div>
         </motion.div>
       )}
 
-      {meetingType === "Hospital" && (
+      {/* ---------------- HOSPITAL FORM ---------------- */}
+      {meetingType === "Hospital" && selectedOrganizationId && isDetailsCollapsed && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-5 bg-white/80 backdrop-blur-xl rounded-2xl border border-cyan-100 shadow-md">
+              <div className="flex justify-between items-start mb-4">
+                  <div>
+                      <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                          <Building2 className="w-5 h-5 text-cyan-600" /> {formData.hospitalName}
+                      </h3>
+                      <p className="text-sm text-slate-500 flex items-center gap-1 mt-1"><MapPin className="w-4 h-4"/> {formData.location}</p>
+                  </div>
+                  <button type="button" onClick={() => setIsDetailsCollapsed(false)} className="text-xs font-semibold flex items-center gap-1 px-3 py-1.5 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 transition-colors">
+                      <Edit2 className="w-3 h-3" /> Edit Details
+                  </button>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-2 text-sm text-slate-700">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> {formData.numBeds || 0} Beds
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-slate-700">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> HR: {formData.headOfHR || "N/A"}
+                  </div>
+              </div>
+          </motion.div>
+      )}
+
+      {meetingType === "Hospital" && (!isDetailsCollapsed || !selectedOrganizationId) && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 p-5 bg-gradient-to-br from-emerald-50 to-cyan-50 rounded-xl border border-cyan-200">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="h-1 w-1 bg-cyan-600 rounded-full"></div>
-            <h3 className="text-sm font-bold text-cyan-900">Hospital Details</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+                <div className="h-1 w-1 bg-cyan-600 rounded-full"></div>
+                <h3 className="text-sm font-bold text-cyan-900">Hospital Details</h3>
+            </div>
+            {selectedOrganizationId && (
+                <button type="button" onClick={() => setIsDetailsCollapsed(true)} className="text-xs font-semibold flex items-center gap-1 px-3 py-1.5 bg-cyan-100 text-cyan-800 rounded-lg hover:bg-cyan-200 transition-colors">
+                    <ChevronUp className="w-3 h-3" /> Collapse
+                </button>
+            )}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 space-y-4 md:space-y-0">
-            <div className={getGlowClass("location")}><FormField label="Location" name="location" value={formData.location || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("numBeds")}><FormField label="Number of Beds" type="number" name="numBeds" value={formData.numBeds || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("numEmployees")}><FormField label="Number of Employees" type="number" name="numEmployees" value={formData.numEmployees || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("headOfHospital")}><FormField label="Head of Hospital" name="headOfHospital" value={formData.headOfHospital || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("contact")}><FormField label="Head Contact" name="contact" value={formData.contact || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("headOfHR")}><FormField label="HR Name" name="headOfHR" value={formData.headOfHR || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("hrContact")}><FormField label="HR Contact" name="hrContact" value={formData.hrContact || ""} onChange={handleInputChange} /></div>
-            <div className={getGlowClass("emailContact")}><FormField label="Email Contact" type="email" name="emailContact" value={formData.emailContact || ""} onChange={handleInputChange} /></div>
-            <div><FormField label="Meeting Date" type="date" name="eventDate" value={formData.eventDate || ""} onChange={handleInputChange} /></div>
-            <div><FormField label="Cost of Visit ($)" type="number" name="costOfVisit" value={formData.costOfVisit || ""} onChange={handleInputChange} /></div>
-            <div><FormField label="Person of Contact" name="personOfContact" value={formData.personOfContact || ""} onChange={handleInputChange} /></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            <FormField label="Location" name="location" value={formData.location || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("location")} />
+            <FormField label="Number of Beds" type="number" name="numBeds" value={formData.numBeds || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("numBeds")} />
+            <FormField label="Number of Employees" type="number" name="numEmployees" value={formData.numEmployees || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("numEmployees")} />
+            <FormField label="Head of Hospital" name="headOfHospital" value={formData.headOfHospital || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("headOfHospital")} />
+            <FormField label="Head Contact" name="contact" value={formData.contact || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("contact")} />
+            <FormField label="HR Name" name="headOfHR" value={formData.headOfHR || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("headOfHR")} />
+            <FormField label="HR Contact" name="hrContact" value={formData.hrContact || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("hrContact")} />
+            <FormField label="Email Contact" type="email" name="emailContact" value={formData.emailContact || ""} onChange={handleInputChange} />
           </div>
-          <div className="mt-4"><FormTextArea label="Marketing Conclusion" name="marketingConclusion" value={formData.marketingConclusion || ""} onChange={handleInputChange} /></div>
         </motion.div>
       )}
+
+      {/* ---------------- REPORT SPECIFIC FIELDS (ALWAYS VISIBLE) ---------------- */}
+      {meetingType && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-5 bg-white rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+                <div className="h-1 w-1 bg-rose-500 rounded-full"></div>
+                <h3 className="text-sm font-bold text-slate-900">Current Visit Details</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                <FormField label="Meeting Date" type="date" name="eventDate" value={formData.eventDate || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("eventDate")} />
+                <FormField label="Cost of Visit ($)" type="number" name="costOfVisit" value={formData.costOfVisit || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("costOfVisit")} />
+                {meetingType === "Hospital" && (
+                    <FormField label="Person of Contact (Today)" name="personOfContact" value={formData.personOfContact || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("personOfContact")} />
+                )}
+            </div>
+            
+            <FormTextArea label={meetingType === "Institution" ? "Marketing Observation" : "Marketing Conclusion"} name={meetingType === "Institution" ? "marketingObservation" : "marketingConclusion"} value={meetingType === "Institution" ? formData.marketingObservation || "" : formData.marketingConclusion || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty(meetingType === "Institution" ? "marketingObservation" : "marketingConclusion")} />
+          </motion.div>
+      )}
+      
       </div>
 
       {!meetingType && (

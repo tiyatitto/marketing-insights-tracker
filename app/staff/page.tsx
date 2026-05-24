@@ -4,7 +4,9 @@ import React, { useState, useEffect } from "react";
 import { auth, db } from "../../lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { collection, query, where, onSnapshot, doc, setDoc, addDoc, runTransaction, serverTimestamp } from "firebase/firestore";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuthRole } from "../../hooks/useAuthRole";
 import { 
     LayoutDashboard, 
     FileText, 
@@ -32,8 +34,11 @@ type ActivityType =
     | "Follow up with Hospitals";
 
 export default function StaffDashboard() {
+    const router = useRouter();
+    const [isLoading, setIsLoading] = useState(true);
+    const [reports, setReports] = useState<any[]>([]);
     const [isSidebarOpen, setSidebarOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<"dashboard" | "create">("dashboard");
+    const [activeTab, setActiveTab] = useState<"dashboard" | "create" | "expense" | "profile">("dashboard");
     const [searchQuery, setSearchQuery] = useState("");
     const [filterActivity, setFilterActivity] = useState("All");
     
@@ -41,41 +46,41 @@ export default function StaffDashboard() {
     const [activityType, setActivityType] = useState<ActivityType>("Meeting with Organization");
     const [formData, setFormData] = useState<any>({});
     
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [submissions, setSubmissions] = useState<any[]>([]);
+    const { user, role, loading: authLoading } = useAuthRole();
 
     useEffect(() => {
-        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-            if (user) {
-                setCurrentUser(user);
-                
-                const q = query(
-                    collection(db, "reports"), 
-                    where("creatorId", "==", user.uid)
-                );
-                
-                const unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
-                    const fetchedReports = snapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data(),
-                        date: doc.data().createdAt?.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) || "Just now",
-                        eventDate: doc.data().formData?.eventDate || doc.data().formData?.meetingDate || doc.data().formData?.date || "",
-                        observation: doc.data().formData?.observation || doc.data().formData?.remarks || doc.data().formData?.marketingObservation || doc.data().formData?.marketingConclusion || "",
-                        timestamp: doc.data().createdAt?.toMillis() || Date.now()
-                    })).sort((a, b) => b.timestamp - a.timestamp);
-                    setSubmissions(fetchedReports);
-                    setIsLoading(false);
-                });
-
-                return () => unsubscribeSnapshot();
-            } else {
-                window.location.href = "/login";
+        if (!authLoading) {
+            if (!user) {
+                router.push("/login");
+            } else if (role !== "staff") {
+                router.push("/admin");
             }
+        }
+    }, [user, role, authLoading, router]);
+
+    useEffect(() => {
+        if (authLoading || role !== "staff" || !user) return;
+        
+        const q = query(
+            collection(db, "reports"), 
+            where("creatorId", "==", user.uid)
+        );
+        
+        const unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
+            const fetchedReports = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                date: doc.data().createdAt?.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) || "Just now",
+                eventDate: doc.data().formData?.eventDate || doc.data().formData?.meetingDate || doc.data().formData?.date || "",
+                observation: doc.data().formData?.observation || doc.data().formData?.remarks || doc.data().formData?.marketingObservation || doc.data().formData?.marketingConclusion || "",
+                timestamp: doc.data().createdAt?.toMillis() || Date.now()
+            })).sort((a, b) => b.timestamp - a.timestamp);
+            setReports(fetchedReports);
+            setIsLoading(false);
         });
 
-        return () => unsubscribeAuth();
-    }, []);
+        return () => unsubscribeSnapshot();
+    }, [authLoading, role, user]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -90,7 +95,7 @@ export default function StaffDashboard() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         
-        if (!currentUser) return;
+        if (!user) return;
         
         // Validate that form has required data
         if (activityType === "Meeting with Organization" && !formData.meetingType) {
@@ -125,9 +130,9 @@ export default function StaffDashboard() {
             }
 
             await setDoc(doc(db, "reports", newReportId), {
-                creatorId: currentUser.uid,
-                creatorName: currentUser.displayName || currentUser.email?.split("@")[0] || "Staff User",
-                creatorEmail: currentUser.email,
+                creatorId: user.uid,
+                creatorName: user.displayName || user.email?.split("@")[0] || "Staff User",
+                creatorEmail: user.email,
                 activity: activityType,
                 name: formData.institutionName || formData.hospitalName || formData.conferenceName || formData.institution || "N/A",
                 cost: formData.costOfVisit || "0",
@@ -147,13 +152,14 @@ export default function StaffDashboard() {
     const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
 
     // Derived Stats
-    const totalReports = submissions.length;
-    const monthlyReports = submissions.filter(s => s.date.includes("May")).length;
-    const totalCost = submissions.reduce((acc, curr) => acc + parseFloat(curr.cost), 0);
+    const safeReports = reports || [];
+    const totalReports = safeReports.length;
+    const monthlyReports = safeReports.filter(s => s?.date?.includes("May")).length;
+    const totalCost = safeReports.reduce((acc, curr) => acc + parseFloat(curr?.cost || "0"), 0);
 
-    const filteredSubmissions = submissions.filter(s => {
-        const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesFilter = filterActivity === "All" || s.activity === filterActivity;
+    const filteredReports = safeReports.filter(s => {
+        const matchesSearch = s?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesFilter = filterActivity === "All" || s?.activity === filterActivity;
         return matchesSearch && matchesFilter;
     });
 
@@ -171,8 +177,7 @@ export default function StaffDashboard() {
                         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, onClick: () => setActiveTab("dashboard") },
                         { id: "create", label: "Create Report", icon: PlusCircle, onClick: () => setActiveTab("create") },
                         { id: "expense", label: "Expense Tracker", icon: DollarSign, onClick: () => setActiveTab("expense") },
-                        { id: "history", label: "My Reports", icon: History, onClick: () => setActiveTab("dashboard") },
-                        { id: "stats", label: "Statistics", icon: PieChart }
+                        { id: "profile", label: "Profile", icon: FileText, onClick: () => setActiveTab("profile" as any) }
                     ]}
                 />
             }
@@ -181,13 +186,18 @@ export default function StaffDashboard() {
                     searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
                     searchPlaceholder="Search everything..."
-                    userName={currentUser?.displayName || currentUser?.email?.split("@")[0] || "Staff User"}
+                    userName={user?.displayName || user?.email?.split("@")[0] || "Staff User"}
                     userRole="Marketing Rep"
                 />
             }
         >
-            {isLoading ? (
-                <div className="flex h-full items-center justify-center">
+            {authLoading ? (
+                <div className="flex min-h-screen flex-col items-center justify-center space-y-4 bg-slate-50">
+                    <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent shadow-md"></div>
+                    <p className="text-sm font-semibold text-slate-500 animate-pulse">Loading Staff Dashboard...</p>
+                </div>
+            ) : (!user || role !== "staff") ? null : isLoading ? (
+                <div className="flex min-h-[60vh] items-center justify-center">
                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent"></div>
                 </div>
             ) : (
@@ -228,7 +238,7 @@ export default function StaffDashboard() {
                                     </select>
                                 </div>
                             </div>
-                            <StaffReportTable submissions={filteredSubmissions} />
+                            <StaffReportTable submissions={filteredReports} />
                         </div>
                     </motion.div>
                 ) : activeTab === "expense" ? (
@@ -246,7 +256,7 @@ export default function StaffDashboard() {
                                 <p className="text-sm text-slate-500 mt-1 font-medium">Monitor your personal marketing expenditures and budget utilization.</p>
                             </div>
                         </div>
-                        <ExpenseTracker reports={submissions} isAdmin={false} />
+                        <ExpenseTracker reports={safeReports} isAdmin={false} />
                     </motion.div>
                 ) : (
                     <motion.div 

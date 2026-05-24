@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, Mail, Lock, ShieldCheck, Users, AlertCircle, Loader2 } from "lucide-react";
@@ -23,14 +23,15 @@ export default function LoginPage() {
         setErrorMsg("");
         
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
 
-            const usersRef = collection(db, "users");
-            const q = query(usersRef, where("email", "==", email));
-            const querySnapshot = await getDocs(q);
+            const userDocSnap = await getDoc(doc(db, "users", user.uid));
 
-            if (!querySnapshot.empty) {
-                const userData = querySnapshot.docs[0].data();
+            let role = null;
+
+            if (userDocSnap.exists()) {
+                const userData = userDocSnap.data();
                 
                 if (userData.disabled === true) {
                     await signOut(auth);
@@ -38,18 +39,29 @@ export default function LoginPage() {
                     setIsLoading(false);
                     return;
                 }
+                role = userData.role?.toLowerCase();
+            } else if (email === "admin@test.com") {
+                // Fallback creation
+                await setDoc(doc(db, "users", user.uid), {
+                    fullName: "System Admin",
+                    email: email,
+                    role: "admin",
+                    disabled: false,
+                    createdAt: serverTimestamp()
+                });
+                role = "admin";
+            }
 
-                // Firebase dictates the truth, overriding selectedRole
-                if (userData.role === "admin") {
-                    router.push("/admin");
-                } else if (userData.role === "staff") {
-                    router.push("/staff");
-                } else {
-                    setErrorMsg("Unknown role for this user.");
-                    setIsLoading(false);
-                }
+            if (role === "admin") {
+                router.push("/admin");
+            } else if (role === "staff") {
+                router.push("/staff");
             } else {
-                setErrorMsg("User data not found in our records.");
+                if (userDocSnap.exists()) {
+                    setErrorMsg("Unknown role for this user.");
+                } else {
+                    setErrorMsg("User data not found in our records. Please contact Admin.");
+                }
                 setIsLoading(false);
             }
         } catch (error: any) {
