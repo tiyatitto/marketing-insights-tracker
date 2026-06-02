@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LayoutGrid, List } from "lucide-react";
+import CountUp from "react-countup";
 
 export interface StaffReport {
     id: string;
@@ -20,6 +21,15 @@ interface StaffReportTableProps {
 
 export function StaffReportTable({ submissions }: StaffReportTableProps) {
     const [viewMode, setViewMode] = useState<"table" | "card">("table");
+
+    const getActivityColor = (activity: string) => {
+        const act = activity.toLowerCase();
+        if (act.includes("meeting")) return "bg-blue-100 text-blue-800 border-blue-200";
+        if (act.includes("conference")) return "bg-purple-100 text-purple-800 border-purple-200";
+        if (act.includes("campaign")) return "bg-green-100 text-green-800 border-green-200";
+        if (act.includes("event") || act.includes("hospital")) return "bg-orange-100 text-orange-800 border-orange-200";
+        return "bg-slate-100 text-slate-800 border-slate-200";
+    };
 
     return (
         <div className="flex flex-col w-full">
@@ -97,23 +107,30 @@ export function StaffReportTable({ submissions }: StaffReportTableProps) {
                     >
                         {submissions.length > 0 ? submissions.map((report) => (
                             <motion.div 
-                                whileHover={{ y: -4, scale: 1.01 }}
+                                whileHover={{ y: -8, scale: 1.02 }}
                                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
                                 key={report.id} 
-                                className="bg-white/80 backdrop-blur-sm border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col"
+                                className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-xl hover:shadow-indigo-500/10 transition-all flex flex-col relative overflow-hidden"
                             >
-                                <div className="flex justify-between items-start mb-4">
+                                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 opacity-50"></div>
+                                <div className="flex justify-between items-start mb-4 mt-2">
                                     <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg tracking-wider border border-indigo-100/50">
                                         {report.id}
                                     </span>
                                     <div className="text-right">
-                                        <div className="font-bold text-emerald-600 text-lg">₹{parseFloat(report.cost).toLocaleString()}</div>
+                                        <div className="font-bold text-emerald-600 text-lg">
+                                            ₹<CountUp end={parseFloat(report.cost)} duration={2.5} separator="," />
+                                        </div>
                                         <div className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 mt-0.5">Event: {report.eventDate || "N/A"}</div>
                                     </div>
                                 </div>
                                 
-                                <h3 className="font-bold text-slate-900 text-lg mb-1 line-clamp-1">{report.name}</h3>
-                                <p className="text-slate-500 text-sm font-medium mb-4">{report.activity}</p>
+                                <h3 className="font-bold text-slate-900 text-lg mb-2 line-clamp-1">{report.name}</h3>
+                                <div className="mb-4">
+                                    <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border ${getActivityColor(report.activity)}`}>
+                                        {report.activity}
+                                    </span>
+                                </div>
                                 
                                 {report.observation && (
                                     <div className="bg-slate-50 rounded-xl p-3 mb-4 flex-1">

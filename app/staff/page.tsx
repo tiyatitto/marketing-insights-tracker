@@ -19,12 +19,12 @@ import {
 } from "lucide-react";
 import { DashboardLayout } from "../../components/layout/DashboardLayout";
 import { Sidebar } from "../../components/layout/Sidebar";
-import { Header } from "../../components/layout/Header";
 import { StatCard } from "../../components/ui/StatCard";
 import { SearchInput } from "../../components/ui/SearchInput";
 import { StaffReportTable } from "../../components/staff/StaffReportTable";
 import { StaffReportForm } from "../../components/staff/StaffReportForm";
 import { ExpenseTracker } from "../../components/analytics/ExpenseTracker";
+import { ProfileManagement } from "../../components/staff/ProfileManagement";
 
 type ActivityType = 
     | "Meeting with Organization"
@@ -103,6 +103,30 @@ export default function StaffDashboard() {
             return;
         }
 
+        // Date Validation: Only Today or Yesterday allowed
+        const eventDateStr = formData.eventDate || formData.meetingDate || formData.date;
+        if (eventDateStr) {
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            // Format to YYYY-MM-DD in local time
+            const formatDate = (date: Date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+
+            const maxDate = formatDate(today);
+            const minDate = formatDate(yesterday);
+
+            if (eventDateStr < minDate || eventDateStr > maxDate) {
+                alert("Reports can only be submitted for dates conducted today or yesterday.");
+                return;
+            }
+        }
+
         try {
             const counterRef = doc(db, "counters", "reports");
             const newReportId = await runTransaction(db, async (transaction) => {
@@ -115,18 +139,37 @@ export default function StaffDashboard() {
                 return `R${nextSeq.toString().padStart(3, '0')}`;
             });
 
-            if (activityType === "Meeting with Organization" && formData.meetingType && !formData.organizationId) {
-                const orgName = formData.institutionName || formData.hospitalName;
-                if (orgName) {
-                    await addDoc(collection(db, "organizations"), {
-                        organizationType: formData.meetingType,
-                        organizationName: orgName,
-                        location: formData.location || "",
-                        commonDetails: formData,
-                        createdAt: serverTimestamp(),
-                        updatedAt: serverTimestamp()
-                    });
+            const orgName = formData.institutionName || formData.hospitalName || formData.institution || formData.conferenceName;
+            
+            if (orgName && !formData.organizationId) {
+                // Determine type based on activity or existing form data
+                let orgType = "Institution";
+                if (activityType === "Follow up with Hospitals" || formData.meetingType === "Hospital") {
+                    orgType = "Hospital";
                 }
+
+                const newOrgData: any = {
+                    organizationType: orgType,
+                    organizationName: orgName,
+                    location: formData.location || "",
+                    contactNumber: formData.contactNumber || "",
+                    email: formData.email || "",
+                    website: formData.website || "",
+                    notes: formData.notes || "",
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                };
+                
+                if (orgType === "Hospital") {
+                    newOrgData.medicalSuperintendent = formData.medicalSuperintendent || "";
+                    newOrgData.specializations = formData.specializations || "";
+                    newOrgData.numberOfBeds = formData.numberOfBeds || "";
+                } else {
+                    newOrgData.headOfInstitution = formData.headOfInstitution || "";
+                    newOrgData.numberOfStudents = formData.numberOfStudents || "";
+                }
+                
+                await addDoc(collection(db, "organizations"), newOrgData);
             }
 
             await setDoc(doc(db, "reports", newReportId), {
@@ -176,18 +219,9 @@ export default function StaffDashboard() {
                     items={[
                         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, onClick: () => setActiveTab("dashboard") },
                         { id: "create", label: "Create Report", icon: PlusCircle, onClick: () => setActiveTab("create") },
-                        { id: "expense", label: "Expense Tracker", icon: DollarSign, onClick: () => setActiveTab("expense") },
-                        { id: "profile", label: "Profile", icon: FileText, onClick: () => setActiveTab("profile" as any) }
+                        { id: "profile", label: "Profiles", icon: Building2, onClick: () => setActiveTab("profile" as any) },
+                        { id: "expense", label: "Expense Tracker", icon: DollarSign, onClick: () => setActiveTab("expense") }
                     ]}
-                />
-            }
-            headerContent={
-                <Header 
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    searchPlaceholder="Search everything..."
-                    userName={user?.displayName || user?.email?.split("@")[0] || "Staff User"}
-                    userRole="Marketing Rep"
                 />
             }
         >
@@ -214,9 +248,9 @@ export default function StaffDashboard() {
                         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Staff Overview</h1>
                         
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                            <StatCard title="Total Reports" value={totalReports} icon={FileText} colorClass="text-indigo-600" bgClass="bg-indigo-50" />
-                            <StatCard title="Monthly Reports" value={monthlyReports} icon={Calendar} colorClass="text-cyan-600" bgClass="bg-cyan-50" />
-                            <StatCard title="Total Marketing Cost" value={`$${totalCost.toLocaleString()}`} icon={DollarSign} colorClass="text-emerald-600" bgClass="bg-emerald-50" />
+                            <StatCard title="Total Reports" value={totalReports} numericValue={totalReports} icon={FileText} colorClass="text-indigo-600" bgClass="bg-indigo-50" />
+                            <StatCard title="Monthly Reports" value={monthlyReports} numericValue={monthlyReports} icon={Calendar} colorClass="text-cyan-600" bgClass="bg-cyan-50" />
+                            <StatCard title="Total Marketing Cost" value={`₹${totalCost.toLocaleString()}`} numericValue={totalCost} prefix="₹" icon={DollarSign} colorClass="text-emerald-600" bgClass="bg-emerald-50" />
                         </div>
 
                         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -241,6 +275,8 @@ export default function StaffDashboard() {
                             <StaffReportTable submissions={filteredReports} />
                         </div>
                     </motion.div>
+                ) : activeTab === "profile" ? (
+                    <ProfileManagement key="profile" currentUser={user} />
                 ) : activeTab === "expense" ? (
                     <motion.div 
                         key="expense"

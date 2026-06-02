@@ -4,7 +4,6 @@ import { AnimatePresence } from "framer-motion";
 
 interface DashboardLayoutProps {
     sidebarContent: React.ReactNode;
-    headerContent: React.ReactNode;
     children: React.ReactNode;
     isSidebarOpen: boolean;
     toggleSidebar: () => void;
@@ -12,7 +11,6 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ 
     sidebarContent, 
-    headerContent, 
     children, 
     isSidebarOpen, 
     toggleSidebar 
@@ -32,22 +30,17 @@ export function DashboardLayout({
             </aside>
 
             {/* Main Content */}
-            <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-                {/* Top Navbar */}
-                <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 backdrop-blur-md px-4 sm:px-6 lg:px-8 z-10">
-                    <div className="flex items-center gap-4">
-                        <button 
-                            className="p-2 -ml-2 text-slate-500 hover:text-slate-700 lg:hidden"
-                            onClick={toggleSidebar}
-                        >
-                            <Menu className="w-6 h-6" />
-                        </button>
-                        {headerContent}
-                    </div>
-                </header>
+            <div className="flex flex-1 flex-col min-w-0 overflow-hidden relative">
+                {/* Floating Mobile Toggle Button */}
+                <button 
+                    className="absolute top-4 left-4 z-10 p-2 bg-white rounded-lg shadow-md text-slate-600 hover:text-indigo-600 lg:hidden"
+                    onClick={toggleSidebar}
+                >
+                    <Menu className="w-5 h-5" />
+                </button>
 
                 {/* Main Scrollable Area */}
-                <main className="flex-1 overflow-y-auto bg-slate-50/50 p-4 sm:p-6 lg:p-8">
+                <main className="flex-1 overflow-y-auto bg-slate-50/50 p-4 sm:p-6 lg:p-8 pt-16 lg:pt-8">
                     {children}
                 </main>
             </div>

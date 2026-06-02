@@ -12,6 +12,20 @@ interface StaffReportFormProps {
 }
 
 export function StaffReportForm({ activityType, formData, handleInputChange, setFormData }: StaffReportFormProps) {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const formatDate = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const maxDate = formatDate(today);
+    const minDate = formatDate(yesterday);
+
     switch (activityType) {
         case "Meeting with Organization":
             return (
@@ -28,7 +42,7 @@ export function StaffReportForm({ activityType, formData, handleInputChange, set
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
                         <FormField label="Institution/Hospital Name" name="institution" value={formData.institution || ""} onChange={handleInputChange} />
                         <FormField label="Location" name="location" value={formData.location || ""} onChange={handleInputChange} />
-                        <FormField label="Date" type="date" name="date" value={formData.date || ""} onChange={handleInputChange} />
+                        <FormField label="Date" type="date" name="date" min={minDate} max={maxDate} value={formData.date || ""} onChange={handleInputChange} />
                         <FormField label="Mode of Meeting" name="modeOfMeeting" value={formData.modeOfMeeting || ""} onChange={handleInputChange} />
                         <FormField label="Cost of Visit ($)" type="number" name="costOfVisit" value={formData.costOfVisit || ""} onChange={handleInputChange} />
                     </div>

@@ -2,9 +2,11 @@
 
 import React, { useState, useMemo } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, LineChart, Line } from "recharts";
-import { DollarSign, TrendingUp, Calendar, Target, Filter, RotateCcw, Users } from "lucide-react";
+import { DollarSign, TrendingUp, Calendar, Target, Filter, RotateCcw, Users, FileText } from "lucide-react";
 import { StatCard } from "../ui/StatCard";
 import { motion, AnimatePresence } from "framer-motion";
+import { ExportMenu } from "../admin/ExportMenu";
+import CountUp from "react-countup";
 
 interface ExpenseTrackerProps {
     reports: any[];
@@ -75,7 +77,7 @@ export function ExpenseTracker({ reports, isAdmin = false }: ExpenseTrackerProps
         return acc;
     }, {} as Record<string, { month: string; year: number; amount: number }>);
 
-    const rawMonthlyData = Object.values(monthlyDataMap).sort((a, b) => {
+    const rawMonthlyData = (Object.values(monthlyDataMap) as any[]).sort((a: any, b: any) => {
         if (a.year !== b.year) return a.year - b.year;
         return monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month);
     });
@@ -123,7 +125,7 @@ export function ExpenseTracker({ reports, isAdmin = false }: ExpenseTrackerProps
         acc[staff] += parseFloat(r.cost || 0);
         return acc;
     }, {} as Record<string, number>);
-    const marketeerData = Object.keys(marketeerDataMap).map(k => ({ name: k, amount: marketeerDataMap[k] })).sort((a, b) => b.amount - a.amount);
+    const marketeerData = Object.keys(marketeerDataMap).map(k => ({ name: k, amount: marketeerDataMap[k] })).sort((a: any, b: any) => b.amount - a.amount);
     const highestMarketeer = marketeerData.length ? marketeerData[0] : { name: "N/A", amount: 0 };
 
     const CustomTooltip = ({ active, payload, label }: any) => {
@@ -190,6 +192,20 @@ export function ExpenseTracker({ reports, isAdmin = false }: ExpenseTrackerProps
                     >
                         <RotateCcw className="w-5 h-5" />
                     </button>
+                    
+                    <div className="pl-2 border-l border-slate-200 ml-1">
+                        <ExportMenu 
+                            data={filteredReports} 
+                            filters={{
+                                fromDate: filterFromDate || "All",
+                                toDate: filterToDate || "All",
+                                month: filterMonth,
+                                activity: filterActivity,
+                                staff: filterMarketeer
+                            }} 
+                            filename={`Expense_Export_${new Date().toISOString().split("T")[0]}`}
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -219,10 +235,10 @@ export function ExpenseTracker({ reports, isAdmin = false }: ExpenseTrackerProps
                         {/* Numerical Stats */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-                                <StatCard title="Total Expense" value={`₹${totalExpense.toLocaleString()}`} icon={DollarSign} colorClass="text-emerald-600" bgClass="bg-gradient-to-br from-emerald-50 to-emerald-100/50" />
+                                <StatCard title="Total Expense" value={`₹${totalExpense.toLocaleString()}`} numericValue={totalExpense} prefix="₹" icon={DollarSign} colorClass="text-emerald-600" bgClass="bg-gradient-to-br from-emerald-50 to-emerald-100/50" />
                             </motion.div>
                             <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-                                <StatCard title="Avg Monthly Expense" value={`₹${avgMonthly.toLocaleString(undefined, {maximumFractionDigits: 0})}`} icon={TrendingUp} colorClass="text-indigo-600" bgClass="bg-gradient-to-br from-indigo-50 to-blue-50" />
+                                <StatCard title="Avg Monthly Expense" value={`₹${avgMonthly.toLocaleString(undefined, {maximumFractionDigits: 0})}`} numericValue={Math.round(avgMonthly)} prefix="₹" icon={TrendingUp} colorClass="text-indigo-600" bgClass="bg-gradient-to-br from-indigo-50 to-blue-50" />
                             </motion.div>
                             <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
                                 <StatCard title="Highest Spend Month" value={highestMonth.month || "N/A"} icon={Calendar} colorClass="text-purple-600" bgClass="bg-gradient-to-br from-purple-50 to-fuchsia-50" />
@@ -231,7 +247,7 @@ export function ExpenseTracker({ reports, isAdmin = false }: ExpenseTrackerProps
                                 {isAdmin ? (
                                     <StatCard title="Top Spender" value={highestMarketeer.name} icon={Target} colorClass="text-rose-600" bgClass="bg-gradient-to-br from-rose-50 to-orange-50" />
                                 ) : (
-                                    <StatCard title="Filtered Reports" value={filteredReports.length} icon={Target} colorClass="text-cyan-600" bgClass="bg-gradient-to-br from-cyan-50 to-blue-50" />
+                                    <StatCard title="Filtered Reports" value={filteredReports.length} numericValue={filteredReports.length} icon={Target} colorClass="text-cyan-600" bgClass="bg-gradient-to-br from-cyan-50 to-blue-50" />
                                 )}
                             </motion.div>
                         </div>
@@ -285,6 +301,67 @@ export function ExpenseTracker({ reports, isAdmin = false }: ExpenseTrackerProps
 
 
                         </div>
+                        
+                        {/* Detailed Report Table */}
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                            className="bg-white/90 backdrop-blur-xl rounded-3xl border border-slate-200/60 shadow-lg overflow-hidden"
+                        >
+                            <div className="p-6 border-b border-slate-200/60 bg-slate-50/50 flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                        <FileText className="w-5 h-5 text-indigo-500" /> Filtered Expense Details
+                                    </h3>
+                                    <p className="text-sm text-slate-500 mt-1">Showing {filteredReports.length} reports</p>
+                                </div>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                                            <th className="p-4 whitespace-nowrap">Report ID</th>
+                                            <th className="p-4 whitespace-nowrap">Organization</th>
+                                            <th className="p-4 whitespace-nowrap">Activity Type</th>
+                                            <th className="p-4 whitespace-nowrap">Event Date</th>
+                                            <th className="p-4 whitespace-nowrap">Staff Name</th>
+                                            <th className="p-4 whitespace-nowrap text-right">Cost</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {filteredReports.map((report) => (
+                                            <tr key={report.id} className="hover:bg-slate-50/50 transition-colors group">
+                                                <td className="p-4 font-semibold text-slate-900 text-sm">{report.id}</td>
+                                                <td className="p-4 text-sm font-medium text-slate-700">
+                                                    {report.institution || report.name || "N/A"}
+                                                </td>
+                                                <td className="p-4 text-sm text-slate-600">
+                                                    <span className="inline-flex px-2 py-1 bg-indigo-50 text-indigo-700 rounded-md text-xs font-semibold">
+                                                        {report.activity}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-sm text-slate-600">{report.eventDate || report.date}</td>
+                                                <td className="p-4 text-sm font-medium text-slate-700">
+                                                    {report.staff || report.creatorName}
+                                                </td>
+                                                <td className="p-4 text-sm font-bold text-emerald-600 text-right">
+                                                    ₹{(parseFloat(report.cost || 0)).toLocaleString()}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-slate-50/80 border-t-2 border-slate-200">
+                                        <tr>
+                                            <td colSpan={5} className="p-4 text-right font-bold text-slate-700">Total Filtered Expense:</td>
+                                            <td className="p-4 text-right font-black text-indigo-700 text-lg">
+                                                ₹<CountUp end={totalExpense} duration={2.5} separator="," />
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </motion.div>
                     </motion.div>
                 </AnimatePresence>
             )}

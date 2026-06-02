@@ -20,12 +20,13 @@ import {
 } from "lucide-react";
 import { DashboardLayout } from "../../components/layout/DashboardLayout";
 import { Sidebar } from "../../components/layout/Sidebar";
-import { Header } from "../../components/layout/Header";
 import { StatCard } from "../../components/ui/StatCard";
 import { SearchInput } from "../../components/ui/SearchInput";
 import { AdminReportTable } from "../../components/admin/AdminReportTable";
 import { AdminUserManagement } from "../../components/admin/AdminUserManagement";
 import { ExportMenu } from "../../components/admin/ExportMenu";
+import { AdminAnalytics } from "../../components/admin/AdminAnalytics";
+import { AdminTargetTracking } from "../../components/admin/AdminTargetTracking";
 import { ExpenseTracker } from "../../components/analytics/ExpenseTracker";
 
 
@@ -108,18 +109,9 @@ export default function AdminDashboard() {
                         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, onClick: () => setActiveTab("dashboard") },
                         { id: "reports", label: "Reports", icon: FileText, onClick: () => setActiveTab("reports") },
                         { id: "expense", label: "Expense Tracker", icon: DollarSign, onClick: () => setActiveTab("expense") },
+                        { id: "targets", label: "Targets", icon: TrendingUp, onClick: () => setActiveTab("targets") },
                         { id: "users", label: "User Management", icon: Users, onClick: () => setActiveTab("users") }
                     ]}
-                />
-            }
-            headerContent={
-                <Header 
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    searchPlaceholder="Global Search (Reports, Staff)..."
-                    userName={user?.displayName || user?.email?.split("@")[0] || "Admin User"}
-                    userRole="Administrator"
-                    userIcon={ShieldCheck}
                 />
             }
         >
@@ -145,7 +137,7 @@ export default function AdminDashboard() {
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-                            {activeTab === "users" ? "User Management" : activeTab === "reports" ? "Reports Hub" : activeTab === "expense" ? "Expense Tracker" : "Executive Dashboard"}
+                            {activeTab === "users" ? "User Management" : activeTab === "reports" ? "Reports Hub" : activeTab === "expense" ? "Expense Tracker" : activeTab === "targets" ? "Target Tracking" : "Executive Dashboard"}
                         </h1>
                         <p className="text-sm text-slate-500 mt-1 font-medium">
                             {activeTab === "users"
@@ -154,75 +146,25 @@ export default function AdminDashboard() {
                                 ? "Monitor and manage marketing reports with filters and quick actions."
                                 : activeTab === "expense"
                                 ? "Track spending trends, marketeer expenses, and budget allocation."
+                                : activeTab === "targets"
+                                ? "Set and monitor monthly targets for unique institution and hospital visits."
                                 : "Real-time overview of marketing activities and expenditures."}
                         </p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                        <ExportMenu 
-                            data={filteredReports} 
-                            filters={{ staff: "All", fromDate: "All", toDate: "All", activity: "All" }} 
-                            filename={`Admin_Export_${new Date().toISOString().split("T")[0]}`}
-                        />
-                    </div>
+                    {/* ExportMenu relocated to specific tabs */}
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {stats.map((stat, idx) => (
-                        <StatCard 
-                            key={idx}
-                            title={stat.title}
-                            value={stat.value}
-                            icon={stat.icon}
-                            colorClass={stat.color}
-                            bgClass={stat.bg}
-                        />
-                    ))}
-                </div>
+                {/* KPI Cards removed as per request */}
 
                 {activeTab === "dashboard" && (
-                    <div className="space-y-8 mt-6">
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div className="lg:col-span-2 rounded-3xl border border-slate-200 bg-white shadow-md overflow-hidden">
-                                <div className="border-b border-slate-200 p-5 lg:p-6 bg-white">
-                                    <h2 className="text-lg font-bold text-slate-900">Recent Reports Preview</h2>
-                                </div>
-                                <AdminReportTable reports={filteredReports.slice(0, 10)} />
-                            </div>
-                            <div className="rounded-3xl border border-slate-200 bg-white shadow-md overflow-hidden h-fit">
-                                <div className="border-b border-slate-200 p-5 bg-white">
-                                    <h2 className="text-lg font-bold text-slate-900">Quick Staff Activity Summary</h2>
-                                </div>
-                                <div className="p-5 space-y-4">
-                                    {Array.from(new Set(safeReports.map(r => r?.staff))).slice(0, 6).map((staff, idx) => {
-                                        const staffReports = safeReports.filter(r => r?.staff === staff);
-                                        const latestReport = staffReports[0];
-                                        return (
-                                            <div key={idx} className="flex items-center gap-4 p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                                                <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold border border-indigo-100 shrink-0">
-                                                    {staff.substring(0, 2).toUpperCase()}
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-sm font-bold text-slate-800 truncate">{staff}</p>
-                                                    <p className="text-xs text-slate-500 truncate">{staffReports.length} reports submitted</p>
-                                                </div>
-                                                <div className="text-xs font-semibold text-slate-400 text-right shrink-0">
-                                                    {latestReport?.date?.split(",")[0] || "Just now"}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                    {safeReports.length === 0 && (
-                                        <div className="text-center py-6 text-sm text-slate-400">No staff activity yet.</div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <AdminAnalytics reports={safeReports} />
                 )}
 
 
 
                 {activeTab === "expense" && <ExpenseTracker reports={safeReports} isAdmin={true} />}
+                
+                {activeTab === "targets" && <AdminTargetTracking reports={safeReports} />}
 
                 {activeTab === "users" && <AdminUserManagement />}
                 
@@ -230,8 +172,13 @@ export default function AdminDashboard() {
                     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                         <div className="border-b border-slate-200 p-5 lg:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white">
                             <h2 className="text-lg font-bold text-slate-900">Reports Management</h2>
-                            <div className="flex flex-col sm:flex-row gap-3">
+                            <div className="flex flex-col sm:flex-row gap-3 items-center">
                                 <SearchInput placeholder="Search by staff, activity, or institution..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                                <ExportMenu 
+                                    data={filteredReports} 
+                                    filters={{ searchQuery: searchQuery || "None" }} 
+                                    filename={`Reports_Export_${new Date().toISOString().split("T")[0]}`}
+                                />
                             </div>
                         </div>
                         <AdminReportTable reports={filteredReports} />

@@ -29,6 +29,21 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
   const [isDetailsCollapsed, setIsDetailsCollapsed] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Date Restrictions
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  const formatDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+  };
+
+  const maxDate = formatDate(today);
+  const minDate = formatDate(yesterday);
 
   // Fetch organizations from Firestore
   useEffect(() => {
@@ -71,8 +86,7 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
     setSelectedIndex(-1);
     
     // Clear form data
-    setFormData({});
-    handleInputChange({ target: { name: "meetingType", value: type } } as any);
+    setFormData({ meetingType: type });
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,23 +110,24 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
     setShowDropdown(false);
     setSelectedIndex(-1);
 
-    // Auto-fill fields
     const newFormData: any = { ...formData };
     newFormData.meetingType = meetingType;
     newFormData.organizationId = org.id;
     newFormData.isNewOrganization = false;
 
-    if (meetingType === "Institution") newFormData.institutionName = org.organizationName;
-    if (meetingType === "Hospital") newFormData.hospitalName = org.organizationName;
+    if (org.organizationType === "Institution") newFormData.institutionName = org.organizationName;
+    if (org.organizationType === "Hospital") newFormData.hospitalName = org.organizationName;
 
-    if (org.commonDetails) {
-        Object.keys(org.commonDetails).forEach(key => {
-            // Don't override report-specific dynamic fields
-            if (!["costOfVisit", "marketingObservation", "marketingConclusion", "feedback", "personOfContact", "eventDate"].includes(key)) {
-                newFormData[key] = org.commonDetails[key];
-            }
-        });
-    }
+    // Auto-fill specified fields
+    const autoFillFields = [
+        "organizationName", "location", "email", "contactNumber", "website", 
+        "numberOfBeds", "specializations", "numberOfStudents",
+        "headOfInstitution", "medicalSuperintendent", "notes"
+    ];
+
+    autoFillFields.forEach(field => {
+        newFormData[field] = org[field] || "";
+    });
 
     setFormData(newFormData);
     setIsDetailsCollapsed(true); // Auto-collapse the static data!
@@ -124,9 +139,9 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
     setIsDetailsCollapsed(false);
     
     // Clean stale autofilled data, preserve new state
-    const newFormData: any = { 
+    const newFormData: any = {
         meetingType: meetingType,
-        isNewOrganization: true 
+        isNewOrganization: true
     };
     
     const cleanName = searchQuery.trim();
@@ -161,6 +176,35 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
   const isFieldEmpty = (fieldName: string) => {
       // Glow if an organization is selected OR if it's a new organization flow, and the field is missing
       return (selectedOrganizationId || formData.isNewOrganization) && !formData[fieldName];
+  };
+
+  const getMissingFields = () => {
+      if (!selectedOrganizationId) return [];
+      const missing = [];
+      if (!formData.location) missing.push("Location");
+      if (!formData.contactNumber) missing.push("Contact Number");
+      if (meetingType === "Institution" && !formData.headOfInstitution) missing.push("Head of Institution");
+      if (meetingType === "Hospital" && !formData.medicalSuperintendent) missing.push("Medical Superintendent");
+      return missing;
+  };
+  const missingFields = getMissingFields();
+  const isProfileIncomplete = selectedOrganizationId && missingFields.length > 0;
+
+  const renderField = (name: string, label: string, type = "text", required = false) => {
+      const empty = isFieldEmpty(name);
+      // If we are collapsed and it's an existing org, only render if it's empty
+      if (isDetailsCollapsed && selectedOrganizationId && !empty) return null;
+      
+      return (
+          <FormField 
+             label={label} 
+             name={name} 
+             type={type}
+             value={formData[name] || ""} 
+             onChange={handleInputChange} 
+             requiredAttention={empty && required} 
+          />
+      );
   };
 
   // Sort dropdown: Exact matches first, then by recency (createdAt), then alphabetically
@@ -246,10 +290,15 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
                             className={`w-full text-left px-4 py-3 transition-colors border-b border-slate-100 last:border-0 ${selectedIndex === index ? "bg-indigo-50 border-l-4 border-l-indigo-500" : "hover:bg-slate-50 border-l-4 border-l-transparent"}`}
                             >
                             <span className="font-semibold text-slate-900">{org.organizationName}</span>
-                            <span className="block text-xs text-slate-500 mt-0.5 flex items-center gap-1"><MapPin className="w-3 h-3"/> {org.location || "No location set"}</span>
+                            <span className="block text-xs text-slate-500 mt-0.5 flex items-center gap-1"><MapPin className="w-3 h-3"/> {org.location || "No location set"} &bull; SPOC: {org.spocName || "N/A"}</span>
                             </button>
                         ))}
                       </>
+                  ) : organizations.length === 0 ? (
+                    <div className="px-4 py-4 text-sm text-slate-600 bg-amber-50">
+                        <span className="font-semibold text-amber-800 block mb-1">Did you mean:</span>
+                        No organization profiles created yet.
+                    </div>
                   ) : (
                     <div className="px-4 py-4 text-sm text-slate-600 bg-amber-50">
                         <span className="font-semibold text-amber-800 block mb-1">Did you mean:</span>
@@ -277,13 +326,16 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
       
       {/* ---------------- INSTITUTION FORM ---------------- */}
       {meetingType === "Institution" && selectedOrganizationId && isDetailsCollapsed && (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-5 bg-white/80 backdrop-blur-xl rounded-2xl border border-indigo-100 shadow-md">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`p-5 bg-white/80 backdrop-blur-xl rounded-2xl border ${isProfileIncomplete ? 'border-amber-300 shadow-amber-100' : 'border-indigo-100'} shadow-md`}>
               <div className="flex justify-between items-start mb-4">
                   <div>
                       <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                           <Building2 className="w-5 h-5 text-indigo-500" /> {formData.institutionName}
+                          {isProfileIncomplete && (
+                              <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full ml-2">Profile Incomplete</span>
+                          )}
                       </h3>
-                      <p className="text-sm text-slate-500 flex items-center gap-1 mt-1"><MapPin className="w-4 h-4"/> {formData.location}</p>
+                      <p className="text-sm text-slate-500 flex items-center gap-1 mt-1"><MapPin className="w-4 h-4"/> {formData.location || <span className="text-amber-500 italic">Missing Location</span>}</p>
                   </div>
                   <button type="button" onClick={() => setIsDetailsCollapsed(false)} className="text-xs font-semibold flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors">
                       <Edit2 className="w-3 h-3" /> Edit Details
@@ -291,49 +343,53 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
               </div>
               <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
                   <div className="flex items-center gap-2 text-sm text-slate-700">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> {formData.numStudents || 0} Students
+                      <CheckCircle2 className={`w-4 h-4 ${formData.numberOfStudents ? 'text-emerald-500' : 'text-slate-300'}`} /> {formData.numberOfStudents || 0} Students
                   </div>
                   <div className="flex items-center gap-2 text-sm text-slate-700">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> SPOC: {formData.spocName || "N/A"}
+                      <CheckCircle2 className={`w-4 h-4 ${formData.headOfInstitution ? 'text-emerald-500' : 'text-amber-500'}`} /> {formData.headOfInstitution || <span className="text-amber-500 italic">Missing Head</span>}
                   </div>
               </div>
           </motion.div>
       )}
 
-      {meetingType === "Institution" && (!isDetailsCollapsed || !selectedOrganizationId) && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-indigo-200">
+      {meetingType === "Institution" && (!isDetailsCollapsed || isProfileIncomplete || !selectedOrganizationId) && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`space-y-4 p-5 rounded-xl border ${isDetailsCollapsed && isProfileIncomplete ? 'bg-amber-50/50 border-amber-200' : 'bg-gradient-to-br from-blue-50 to-indigo-50 border-indigo-200'}`}>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-                <div className="h-1 w-1 bg-indigo-600 rounded-full"></div>
-                <h3 className="text-sm font-bold text-indigo-900">Institution Details</h3>
+                <div className={`h-1 w-1 rounded-full ${isDetailsCollapsed && isProfileIncomplete ? 'bg-amber-500' : 'bg-indigo-600'}`}></div>
+                <h3 className={`text-sm font-bold ${isDetailsCollapsed && isProfileIncomplete ? 'text-amber-900' : 'text-indigo-900'}`}>
+                    {isDetailsCollapsed && isProfileIncomplete ? "Missing Required Fields" : "Institution Details"}
+                </h3>
             </div>
-            {selectedOrganizationId && (
+            {selectedOrganizationId && !isDetailsCollapsed && (
                 <button type="button" onClick={() => setIsDetailsCollapsed(true)} className="text-xs font-semibold flex items-center gap-1 px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors">
                     <ChevronUp className="w-3 h-3" /> Collapse
                 </button>
             )}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            <FormField label="Location" name="location" value={formData.location || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("location")} />
-            <FormField label="Number of Final Year Students" type="number" name="numStudents" value={formData.numStudents || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("numStudents")} />
-            <FormField label="Head of Institution" name="headOfInstitute" value={formData.headOfInstitute || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("headOfInstitute")} />
-            <FormField label="Head Contact" name="headContact" value={formData.headContact || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("headContact")} />
-            <FormField label="SPOC Name" name="spocName" value={formData.spocName || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("spocName")} />
-            <FormField label="SPOC Contact" name="spocContact" value={formData.spocContact || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("spocContact")} />
-            <FormField label="SPOC Email" type="email" name="spocEmail" value={formData.spocEmail || ""} onChange={handleInputChange} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            {renderField("location", "Location", "text", true)}
+            {renderField("contactNumber", "Contact Number", "text", true)}
+            {renderField("email", "Email", "email")}
+            {renderField("website", "Website")}
+            {renderField("headOfInstitution", "Head of Institution", "text", true)}
+            {renderField("numberOfStudents", "Number of Students", "number")}
           </div>
         </motion.div>
       )}
 
       {/* ---------------- HOSPITAL FORM ---------------- */}
       {meetingType === "Hospital" && selectedOrganizationId && isDetailsCollapsed && (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-5 bg-white/80 backdrop-blur-xl rounded-2xl border border-cyan-100 shadow-md">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`p-5 bg-white/80 backdrop-blur-xl rounded-2xl border ${isProfileIncomplete ? 'border-amber-300 shadow-amber-100' : 'border-cyan-100'} shadow-md`}>
               <div className="flex justify-between items-start mb-4">
                   <div>
                       <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                           <Building2 className="w-5 h-5 text-cyan-600" /> {formData.hospitalName}
+                          {isProfileIncomplete && (
+                              <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full ml-2">Profile Incomplete</span>
+                          )}
                       </h3>
-                      <p className="text-sm text-slate-500 flex items-center gap-1 mt-1"><MapPin className="w-4 h-4"/> {formData.location}</p>
+                      <p className="text-sm text-slate-500 flex items-center gap-1 mt-1"><MapPin className="w-4 h-4"/> {formData.location || <span className="text-amber-500 italic">Missing Location</span>}</p>
                   </div>
                   <button type="button" onClick={() => setIsDetailsCollapsed(false)} className="text-xs font-semibold flex items-center gap-1 px-3 py-1.5 bg-cyan-50 text-cyan-700 rounded-lg hover:bg-cyan-100 transition-colors">
                       <Edit2 className="w-3 h-3" /> Edit Details
@@ -341,37 +397,38 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
               </div>
               <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
                   <div className="flex items-center gap-2 text-sm text-slate-700">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> {formData.numBeds || 0} Beds
+                      <CheckCircle2 className={`w-4 h-4 ${formData.numberOfBeds ? 'text-emerald-500' : 'text-slate-300'}`} /> {formData.numberOfBeds || 0} Beds
                   </div>
                   <div className="flex items-center gap-2 text-sm text-slate-700">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" /> HR: {formData.headOfHR || "N/A"}
+                      <CheckCircle2 className={`w-4 h-4 ${formData.medicalSuperintendent ? 'text-emerald-500' : 'text-amber-500'}`} /> {formData.medicalSuperintendent || <span className="text-amber-500 italic">Missing Med. Supt.</span>}
                   </div>
               </div>
           </motion.div>
       )}
 
-      {meetingType === "Hospital" && (!isDetailsCollapsed || !selectedOrganizationId) && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 p-5 bg-gradient-to-br from-emerald-50 to-cyan-50 rounded-xl border border-cyan-200">
+      {meetingType === "Hospital" && (!isDetailsCollapsed || isProfileIncomplete || !selectedOrganizationId) && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`space-y-4 p-5 rounded-xl border ${isDetailsCollapsed && isProfileIncomplete ? 'bg-amber-50/50 border-amber-200' : 'bg-gradient-to-br from-emerald-50 to-cyan-50 border-cyan-200'}`}>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-                <div className="h-1 w-1 bg-cyan-600 rounded-full"></div>
-                <h3 className="text-sm font-bold text-cyan-900">Hospital Details</h3>
+                <div className={`h-1 w-1 rounded-full ${isDetailsCollapsed && isProfileIncomplete ? 'bg-amber-500' : 'bg-cyan-600'}`}></div>
+                <h3 className={`text-sm font-bold ${isDetailsCollapsed && isProfileIncomplete ? 'text-amber-900' : 'text-cyan-900'}`}>
+                    {isDetailsCollapsed && isProfileIncomplete ? "Missing Required Fields" : "Hospital Details"}
+                </h3>
             </div>
-            {selectedOrganizationId && (
+            {selectedOrganizationId && !isDetailsCollapsed && (
                 <button type="button" onClick={() => setIsDetailsCollapsed(true)} className="text-xs font-semibold flex items-center gap-1 px-3 py-1.5 bg-cyan-100 text-cyan-800 rounded-lg hover:bg-cyan-200 transition-colors">
                     <ChevronUp className="w-3 h-3" /> Collapse
                 </button>
             )}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            <FormField label="Location" name="location" value={formData.location || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("location")} />
-            <FormField label="Number of Beds" type="number" name="numBeds" value={formData.numBeds || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("numBeds")} />
-            <FormField label="Number of Employees" type="number" name="numEmployees" value={formData.numEmployees || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("numEmployees")} />
-            <FormField label="Head of Hospital" name="headOfHospital" value={formData.headOfHospital || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("headOfHospital")} />
-            <FormField label="Head Contact" name="contact" value={formData.contact || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("contact")} />
-            <FormField label="HR Name" name="headOfHR" value={formData.headOfHR || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("headOfHR")} />
-            <FormField label="HR Contact" name="hrContact" value={formData.hrContact || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("hrContact")} />
-            <FormField label="Email Contact" type="email" name="emailContact" value={formData.emailContact || ""} onChange={handleInputChange} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            {renderField("location", "Location", "text", true)}
+            {renderField("contactNumber", "Contact Number", "text", true)}
+            {renderField("email", "Email", "email")}
+            {renderField("website", "Website")}
+            {renderField("medicalSuperintendent", "Medical Superintendent", "text", true)}
+            {renderField("specializations", "Specializations")}
+            {renderField("numberOfBeds", "Number of Beds", "number")}
           </div>
         </motion.div>
       )}
@@ -384,11 +441,9 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
                 <h3 className="text-sm font-bold text-slate-900">Current Visit Details</h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-                <FormField label="Meeting Date" type="date" name="eventDate" value={formData.eventDate || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("eventDate")} />
+                <FormField label="Meeting Date" type="date" name="eventDate" min={minDate} max={maxDate} value={formData.eventDate || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("eventDate")} />
                 <FormField label="Cost of Visit ($)" type="number" name="costOfVisit" value={formData.costOfVisit || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("costOfVisit")} />
-                {meetingType === "Hospital" && (
-                    <FormField label="Person of Contact (Today)" name="personOfContact" value={formData.personOfContact || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("personOfContact")} />
-                )}
+                <FormField label="Person of Contact (Today)" name="personOfContact" value={formData.personOfContact || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty("personOfContact")} />
             </div>
             
             <FormTextArea label={meetingType === "Institution" ? "Marketing Observation" : "Marketing Conclusion"} name={meetingType === "Institution" ? "marketingObservation" : "marketingConclusion"} value={meetingType === "Institution" ? formData.marketingObservation || "" : formData.marketingConclusion || ""} onChange={handleInputChange} requiredAttention={isFieldEmpty(meetingType === "Institution" ? "marketingObservation" : "marketingConclusion")} />

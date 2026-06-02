@@ -1,5 +1,6 @@
 import React from "react";
 import { LucideIcon } from "lucide-react";
+import CountUp from "react-countup";
 
 interface StatCardProps {
     title: string;
@@ -7,9 +8,12 @@ interface StatCardProps {
     icon: LucideIcon;
     colorClass: string;
     bgClass: string;
+    numericValue?: number;
+    prefix?: string;
+    suffix?: string;
 }
 
-export function StatCard({ title, value, icon: Icon, colorClass, bgClass }: StatCardProps) {
+export function StatCard({ title, value, icon: Icon, colorClass, bgClass, numericValue, prefix = "", suffix = "" }: StatCardProps) {
     return (
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-4 mb-4">
@@ -19,7 +23,13 @@ export function StatCard({ title, value, icon: Icon, colorClass, bgClass }: Stat
             </div>
             <div>
                 <p className="text-sm font-medium text-slate-500">{title}</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">{value}</p>
+                <p className="text-2xl font-bold text-slate-900 mt-1">
+                    {numericValue !== undefined ? (
+                        <CountUp end={numericValue} prefix={prefix} suffix={suffix} duration={2.5} separator="," />
+                    ) : (
+                        value
+                    )}
+                </p>
             </div>
         </div>
     );

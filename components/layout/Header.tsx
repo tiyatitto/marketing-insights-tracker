@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, Bell, User } from "lucide-react";
+import { Search, User } from "lucide-react";
 
 interface HeaderProps {
     searchQuery: string;
@@ -31,11 +31,6 @@ export function Header({ searchQuery, setSearchQuery, searchPlaceholder, userNam
                 <span className="hidden md:block text-sm font-medium text-slate-500">
                     {new Date().toLocaleDateString("en-US", { weekday: 'short', month: 'short', day: 'numeric' })}
                 </span>
-                
-                <button className="relative p-2 text-slate-500 hover:text-slate-700 transition-colors">
-                    <Bell className="w-5 h-5" />
-                    <span className="absolute top-1.5 right-1.5 block h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white"></span>
-                </button>
                 
                 <div className="flex items-center gap-3 border-l border-slate-200 pl-4 ml-2 cursor-pointer">
                     <div className="flex flex-col text-right hidden sm:block">
