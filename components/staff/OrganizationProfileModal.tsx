@@ -175,32 +175,32 @@ export function OrganizationProfileModal({ isOpen, onClose, initialData, current
                             <input 
                                 {...register("organizationName")} 
                                 disabled={isEditMode}
-                                className={`w-full p-2.5 rounded-lg border ${errors.organizationName ? "border-rose-500" : "border-slate-300"} ${isEditMode ? "bg-slate-100 text-slate-500 cursor-not-allowed" : "bg-white"}`} 
+                                className={`w-full p-2.5 rounded-lg border text-black placeholder:text-slate-400 ${errors.organizationName ? "border-rose-500" : "border-slate-300"} ${isEditMode ? "bg-slate-100 cursor-not-allowed font-semibold" : "bg-white"}`} 
                             />
                             {errors.organizationName && <p className="text-xs text-rose-500">{errors.organizationName.message}</p>}
                         </div>
 
                         <div className="space-y-1 sm:col-span-2">
                             <label className="text-sm font-medium text-slate-700">Location / Address *</label>
-                            <input {...register("location")} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" />
+                            <input {...register("location")} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white text-black placeholder:text-slate-400" />
                             {errors.location && <p className="text-xs text-rose-500">{errors.location.message}</p>}
                         </div>
 
                         <div className="space-y-1">
                             <label className="text-sm font-medium text-slate-700">Contact Number *</label>
-                            <input {...register("contactNumber")} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" />
+                            <input {...register("contactNumber")} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white text-black placeholder:text-slate-400" />
                             {errors.contactNumber && <p className="text-xs text-rose-500">{errors.contactNumber.message}</p>}
                         </div>
 
                         <div className="space-y-1">
                             <label className="text-sm font-medium text-slate-700">Email Address</label>
-                            <input type="email" {...register("email")} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" />
+                            <input type="email" {...register("email")} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white text-black placeholder:text-slate-400" />
                             {errors.email && <p className="text-xs text-rose-500">{errors.email.message}</p>}
                         </div>
 
                         <div className="space-y-1">
                             <label className="text-sm font-medium text-slate-700">Website</label>
-                            <input {...register("website")} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" />
+                            <input {...register("website")} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white text-black placeholder:text-slate-400" />
                             {errors.website && <p className="text-xs text-rose-500">{errors.website.message}</p>}
                         </div>
 
@@ -209,12 +209,12 @@ export function OrganizationProfileModal({ isOpen, onClose, initialData, current
                             <>
                                 <div className="space-y-1">
                                     <label className="text-sm font-medium text-slate-700">Head of Institution *</label>
-                                    <input {...register("headOfInstitution" as any)} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" />
+                                    <input {...register("headOfInstitution" as any)} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white text-black placeholder:text-slate-400" />
                                     {(errors as any).headOfInstitution && <p className="text-xs text-rose-500">{(errors as any).headOfInstitution.message}</p>}
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-sm font-medium text-slate-700">Number of Students</label>
-                                    <input type="number" {...register("numberOfStudents" as any)} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" />
+                                    <input type="number" {...register("numberOfStudents" as any)} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white text-black placeholder:text-slate-400" />
                                 </div>
                             </>
                         )}
@@ -224,23 +224,23 @@ export function OrganizationProfileModal({ isOpen, onClose, initialData, current
                             <>
                                 <div className="space-y-1">
                                     <label className="text-sm font-medium text-slate-700">Medical Superintendent *</label>
-                                    <input {...register("medicalSuperintendent" as any)} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" />
+                                    <input {...register("medicalSuperintendent" as any)} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white text-black placeholder:text-slate-400" />
                                     {(errors as any).medicalSuperintendent && <p className="text-xs text-rose-500">{(errors as any).medicalSuperintendent.message}</p>}
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-sm font-medium text-slate-700">Specializations</label>
-                                    <input {...register("specializations" as any)} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" />
+                                    <input {...register("specializations" as any)} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white text-black placeholder:text-slate-400" />
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-sm font-medium text-slate-700">Number of Beds</label>
-                                    <input type="number" {...register("numberOfBeds" as any)} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" />
+                                    <input type="number" {...register("numberOfBeds" as any)} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white text-black placeholder:text-slate-400" />
                                 </div>
                             </>
                         )}
 
                         <div className="space-y-1 sm:col-span-2">
                             <label className="text-sm font-medium text-slate-700">Notes / Description</label>
-                            <textarea {...register("notes")} rows={3} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white" />
+                            <textarea {...register("notes")} rows={3} className="w-full p-2.5 rounded-lg border border-slate-300 bg-white text-black placeholder:text-slate-400" />
                         </div>
                     </div>
 

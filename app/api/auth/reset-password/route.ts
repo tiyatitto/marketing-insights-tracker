@@ -20,13 +20,21 @@ export async function POST(req: Request) {
             throw authError;
         }
 
-        // 2. Mock OTP verification happens on frontend before this step
-        // In this rebuilt flow, we accept ANY valid recovery email because the user explicitly requested to drop pre-configured checks.
+        // 2. Verify OTP was successfully completed
+        const otpDocRef = adminDb.collection("otps").doc(email);
+        const otpDoc = await otpDocRef.get();
+
+        if (!otpDoc.exists || !otpDoc.data()?.verified) {
+            return NextResponse.json({ error: "Unauthorized password reset attempt. OTP not verified." }, { status: 403 });
+        }
 
         // 3. Update the password
         await adminAuth.updateUser(authUser.uid, {
             password: newPassword,
         });
+
+        // 4. Clean up OTP document
+        await otpDocRef.delete();
 
         return NextResponse.json({ message: "Password updated successfully." }, { status: 200 });
 

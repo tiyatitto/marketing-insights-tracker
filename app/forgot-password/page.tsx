@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, Lock, ShieldCheck, AlertCircle, Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, ShieldCheck, AlertCircle, Loader2, ArrowLeft, CheckCircle2, Eye, EyeOff } from "lucide-react";
 
 export default function ForgotPasswordPage() {
     const router = useRouter();
@@ -12,10 +12,31 @@ export default function ForgotPasswordPage() {
     const [recoveryEmail, setRecoveryEmail] = useState("");
     const [otp, setOtp] = useState("");
     const [newPassword, setNewPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     
     const [isLoading, setIsLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
     const [successMsg, setSuccessMsg] = useState("");
+    
+    const [timer, setTimer] = useState(0);
+
+    // Timer effect
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (timer > 0) {
+            interval = setInterval(() => {
+                setTimer((prev) => prev - 1);
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [timer]);
+
+    const formatTime = (seconds: number) => {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s < 10 ? '0' : ''}${s}`;
+    };
 
     const handleVerify = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -25,31 +46,103 @@ export default function ForgotPasswordPage() {
             setErrorMsg("Please provide both Login Email and Recovery Email.");
             return;
         }
-        
-        setSuccessMsg("An OTP has been sent to your Recovery Email.");
-        setStep(2);
+
+        setIsLoading(true);
+        try {
+            const res = await fetch("/api/auth/send-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, recoveryEmail })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to send OTP.");
+
+            setSuccessMsg(data.message || `An OTP has been sent to ${recoveryEmail}`);
+            setStep(2);
+            setTimer(300); // 5 minutes countdown
+        } catch (err: any) {
+            setErrorMsg(err.message);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const handleVerifyOtp = (e: React.FormEvent) => {
+    const handleVerifyOtp = async (e: React.FormEvent) => {
         e.preventDefault();
         setErrorMsg("");
         setSuccessMsg("");
 
-        if (!otp || otp.length < 4) {
-            setErrorMsg("Please enter a valid OTP.");
+        if (!otp || otp.length !== 6) {
+            setErrorMsg("Please enter a valid 6-digit OTP.");
             return;
         }
 
-        // Simulate OTP success
-        setSuccessMsg("OTP Verified! You can now reset your password.");
-        setStep(3);
+        setIsLoading(true);
+        try {
+            const res = await fetch("/api/auth/verify-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, otp })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to verify OTP.");
+
+            // Clear success msg so it doesn't disable inputs in Step 3!
+            setSuccessMsg(""); 
+            setStep(3);
+        } catch (err: any) {
+            setErrorMsg(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleResendOtp = async () => {
+        if (timer > 240) { // Limit excessive resends (allow only after 1 min)
+            setErrorMsg("Please wait before requesting another OTP.");
+            return;
+        }
+        
+        setErrorMsg("");
+        setSuccessMsg("");
+        setIsLoading(true);
+        try {
+            const res = await fetch("/api/auth/send-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, recoveryEmail })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to resend OTP.");
+
+            setSuccessMsg(data.message || `A new OTP has been sent to ${recoveryEmail}`);
+            setTimer(300);
+        } catch (err: any) {
+            setErrorMsg(err.message);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleReset = async (e: React.FormEvent) => {
         e.preventDefault();
         setErrorMsg("");
-        setIsLoading(true);
+        setSuccessMsg("");
 
+        if (newPassword.length < 6) {
+            setErrorMsg("Password must be at least 6 characters long.");
+            return;
+        }
+        
+        if (newPassword !== confirmPassword) {
+            setErrorMsg("Passwords do not match.");
+            return;
+        }
+
+        setIsLoading(true);
         try {
             const res = await fetch("/api/auth/reset-password", {
                 method: "POST",
@@ -73,6 +166,18 @@ export default function ForgotPasswordPage() {
             setIsLoading(false);
         }
     };
+
+    // Password strength logic
+    const getStrength = (pass: string) => {
+        let strength = 0;
+        if (pass.length > 5) strength += 1;
+        if (pass.length > 8) strength += 1;
+        if (/[A-Z]/.test(pass)) strength += 1;
+        if (/[0-9]/.test(pass)) strength += 1;
+        if (/[^A-Za-z0-9]/.test(pass)) strength += 1;
+        return strength;
+    };
+    const strength = getStrength(newPassword);
 
     return (
         <div className="flex min-h-screen bg-slate-50 font-sans">
@@ -171,6 +276,7 @@ export default function ForgotPasswordPage() {
                                             className="w-full rounded-2xl border border-slate-300 bg-white/50 pl-12 pr-4 py-3.5 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm font-medium"
                                             value={email}
                                             onChange={(e) => setEmail(e.target.value)}
+                                            disabled={isLoading}
                                         />
                                     </div>
                                 </div>
@@ -188,15 +294,17 @@ export default function ForgotPasswordPage() {
                                             className="w-full rounded-2xl border border-slate-300 bg-white/50 pl-12 pr-4 py-3.5 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm font-medium"
                                             value={recoveryEmail}
                                             onChange={(e) => setRecoveryEmail(e.target.value)}
+                                            disabled={isLoading}
                                         />
                                     </div>
                                 </div>
 
                                 <button
                                     type="submit"
-                                    className="mt-8 w-full flex items-center justify-center rounded-2xl bg-indigo-600 px-4 py-4 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition-all hover:shadow-indigo-600/40 hover:bg-indigo-700 active:scale-[0.98]"
+                                    disabled={isLoading}
+                                    className="mt-8 w-full flex items-center justify-center rounded-2xl bg-indigo-600 px-4 py-4 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition-all hover:shadow-indigo-600/40 hover:bg-indigo-700 disabled:opacity-70 disabled:cursor-not-allowed active:scale-[0.98]"
                                 >
-                                    Proceed to Next Step
+                                    {isLoading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Sending...</> : "Proceed to Next Step"}
                                 </button>
                                 
                                 <div className="text-center mt-4 lg:hidden">
@@ -213,7 +321,14 @@ export default function ForgotPasswordPage() {
                                 className="space-y-5"
                             >
                                 <div>
-                                    <label className="mb-2 block text-sm font-bold text-slate-700">Verification Code (OTP)</label>
+                                    <label className="mb-2 block text-sm font-bold text-slate-700 flex justify-between">
+                                        <span>Verification Code (OTP)</span>
+                                        {timer > 0 ? (
+                                            <span className="text-indigo-600 text-xs font-bold">{formatTime(timer)}</span>
+                                        ) : (
+                                            <span className="text-rose-500 text-xs font-bold">Expired</span>
+                                        )}
+                                    </label>
                                     <div className="relative group">
                                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
                                             <ShieldCheck className="h-5 w-5" />
@@ -226,16 +341,28 @@ export default function ForgotPasswordPage() {
                                             className="w-full rounded-2xl border border-slate-300 bg-white/50 pl-12 pr-4 py-3.5 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm font-medium tracking-widest text-center"
                                             value={otp}
                                             onChange={(e) => setOtp(e.target.value)}
+                                            disabled={isLoading}
                                         />
                                     </div>
-                                    <p className="mt-2 text-xs text-slate-500 text-center font-medium">Enter the 6-digit code sent to {recoveryEmail}</p>
+                                    <div className="mt-2 flex justify-between items-center px-1">
+                                        <p className="text-xs text-slate-500 font-medium">Sent to {recoveryEmail}</p>
+                                        <button 
+                                            type="button" 
+                                            onClick={handleResendOtp}
+                                            disabled={isLoading || timer > 240}
+                                            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 disabled:text-slate-400 transition-colors"
+                                        >
+                                            Resend OTP
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <button
                                     type="submit"
-                                    className="mt-8 w-full flex items-center justify-center rounded-2xl bg-indigo-600 px-4 py-4 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition-all hover:shadow-indigo-600/40 hover:bg-indigo-700 active:scale-[0.98]"
+                                    disabled={isLoading || timer === 0}
+                                    className="mt-8 w-full flex items-center justify-center rounded-2xl bg-indigo-600 px-4 py-4 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition-all hover:shadow-indigo-600/40 hover:bg-indigo-700 disabled:opacity-70 disabled:cursor-not-allowed active:scale-[0.98]"
                                 >
-                                    Verify OTP
+                                    {isLoading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Verifying...</> : "Verify OTP"}
                                 </button>
                                 
                                 <div className="text-center mt-4">
@@ -258,22 +385,57 @@ export default function ForgotPasswordPage() {
                                             <Lock className="h-5 w-5" />
                                         </div>
                                         <input
-                                            type="password"
+                                            type={showPassword ? "text" : "password"}
                                             placeholder="••••••••"
                                             required
                                             minLength={6}
-                                            className="w-full rounded-2xl border border-slate-300 bg-white/50 pl-12 pr-4 py-3.5 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm font-medium"
+                                            className="w-full rounded-2xl border border-slate-300 bg-white/50 pl-12 pr-12 py-3.5 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm font-medium"
                                             value={newPassword}
                                             onChange={(e) => setNewPassword(e.target.value)}
-                                            disabled={isLoading || !!successMsg}
+                                            disabled={isLoading}
+                                        />
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-indigo-600 transition-colors"
+                                        >
+                                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                        </button>
+                                    </div>
+                                    {newPassword && (
+                                        <div className="mt-2 flex gap-1 h-1.5 px-1">
+                                            {[1, 2, 3, 4, 5].map((level) => (
+                                                <div 
+                                                    key={level} 
+                                                    className={`flex-1 rounded-full ${strength >= level ? (strength > 3 ? 'bg-emerald-500' : strength > 2 ? 'bg-amber-400' : 'bg-rose-400') : 'bg-slate-200'}`}
+                                                ></div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="mb-2 block text-sm font-bold text-slate-700">Confirm Password</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
+                                            <Lock className="h-5 w-5" />
+                                        </div>
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            placeholder="••••••••"
+                                            required
+                                            minLength={6}
+                                            className={`w-full rounded-2xl border ${confirmPassword && newPassword !== confirmPassword ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/10' : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-500/10'} bg-white/50 pl-12 pr-4 py-3.5 text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-4 shadow-sm font-medium`}
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            disabled={isLoading}
                                         />
                                     </div>
-                                    <p className="mt-2 text-xs text-slate-500 font-medium">Must be at least 6 characters long.</p>
                                 </div>
 
                                 <button
                                     type="submit"
-                                    disabled={isLoading || !!successMsg}
+                                    disabled={isLoading || newPassword !== confirmPassword || newPassword.length < 6}
                                     className="mt-8 w-full flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-4 text-sm font-bold text-white shadow-lg shadow-emerald-600/30 transition-all hover:shadow-emerald-600/40 hover:bg-emerald-700 disabled:opacity-70 disabled:cursor-not-allowed active:scale-[0.98]"
                                 >
                                     {isLoading ? (

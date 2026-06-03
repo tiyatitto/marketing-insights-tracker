@@ -20,12 +20,36 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
 
     useEffect(() => {
         const q = query(collection(db, "monthlyTargets"));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetched = snapshot.docs.map(d => ({
-                id: d.id,
-                ...d.data()
-            })) as MonthlyTarget[];
-            setTargets(fetched);
+        const unsubscribe = onSnapshot(q, async (snapshot) => {
+            if (snapshot.empty) {
+                // Auto-seed predefined targets
+                console.log("Seeding targets...");
+                const year = new Date().getFullYear();
+                const defaultTargets = [
+                    { id: `Institution_${year}_01`, type: "Institution", month: `${year}-01`, target: 20 },
+                    { id: `Institution_${year}_02`, type: "Institution", month: `${year}-02`, target: 20 },
+                    { id: `Institution_${year}_03`, type: "Institution", month: `${year}-03`, target: 25 },
+                    { id: `Institution_${year}_04`, type: "Institution", month: `${year}-04`, target: 25 },
+                    { id: `Institution_${year}_05`, type: "Institution", month: `${year}-05`, target: 30 },
+                    { id: `Institution_${year}_06`, type: "Institution", month: `${year}-06`, target: 30 },
+                    { id: `Hospital_${year}_01`, type: "Hospital", month: `${year}-01`, target: 15 },
+                    { id: `Hospital_${year}_02`, type: "Hospital", month: `${year}-02`, target: 15 },
+                    { id: `Hospital_${year}_03`, type: "Hospital", month: `${year}-03`, target: 20 },
+                    { id: `Hospital_${year}_04`, type: "Hospital", month: `${year}-04`, target: 20 },
+                    { id: `Hospital_${year}_05`, type: "Hospital", month: `${year}-05`, target: 25 },
+                    { id: `Hospital_${year}_06`, type: "Hospital", month: `${year}-06`, target: 25 },
+                ];
+                
+                for (const t of defaultTargets) {
+                    await setDoc(doc(db, "monthlyTargets", t.id), t);
+                }
+            } else {
+                const fetched = snapshot.docs.map(d => ({
+                    id: d.id,
+                    ...d.data()
+                })) as MonthlyTarget[];
+                setTargets(fetched);
+            }
             setIsLoading(false);
         });
         return () => unsubscribe();
@@ -33,20 +57,27 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
 
     const [isEditing, setIsEditing] = useState<string | null>(null);
     const [editValue, setEditValue] = useState<number>(0);
-    const [selectedMonth, setSelectedMonth] = useState(() => {
-        const d = new Date();
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        return `${year}-${month}`;
-    });
+    const [editMonth, setEditMonth] = useState<string>("");
 
-    const handleSaveTarget = async (id: string, type: "Institution" | "Hospital", month: string, targetValue: number) => {
+    const handleSaveTarget = async (oldDocId: string, type: "Institution" | "Hospital", oldMonthStr: string, newMonthStr: string, targetValue: number) => {
         try {
-            await setDoc(doc(db, "monthlyTargets", id), {
+            const newDocId = `${type}_${newMonthStr}`;
+            
+            // If they changed the month, we create a new doc and delete the old one IF the old one actually existed in DB
+            if (oldDocId !== newDocId) {
+                // Check if old doc exists in targets array
+                const oldExists = targets.find(t => t.id === oldDocId);
+                if (oldExists) {
+                    await deleteDoc(doc(db, "monthlyTargets", oldDocId));
+                }
+            }
+            
+            await setDoc(doc(db, "monthlyTargets", newDocId), {
                 type,
-                month,
+                month: newMonthStr,
                 target: targetValue
             }, { merge: true });
+            
             setIsEditing(null);
         } catch (error) {
             console.error("Error saving target:", error);
@@ -84,24 +115,23 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
         return uniqueOrgs.size;
     };
 
-    // Generate last 6 months + next 6 months for selection
-    const generateMonths = () => {
-        const months = [];
-        const d = new Date();
-        d.setMonth(d.getMonth() - 6);
-        for (let i = 0; i < 12; i++) {
-            const year = d.getFullYear();
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            months.push(`${year}-${month}`);
-            d.setMonth(d.getMonth() + 1);
-        }
-        return months;
-    };
-
-    const monthsList = generateMonths();
-
-    // Data for currently active tab
+    // Combine months from DB + ensure current and next 3 months are visible
+    const monthsSet = new Set<string>();
     const filteredTargets = targets.filter(t => t.type === activeTab);
+    filteredTargets.forEach(t => monthsSet.add(t.month));
+
+    const d = new Date();
+    // Previous 2 months for context
+    d.setMonth(d.getMonth() - 2);
+    for (let i = 0; i < 6; i++) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        monthsSet.add(`${year}-${month}`);
+        d.setMonth(d.getMonth() + 1);
+    }
+
+    // Sort months chronologically
+    const monthsList = Array.from(monthsSet).sort();
     
     return (
         <div className="bg-white/80 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -142,7 +172,6 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
                                 <th className="pb-3 px-4">Month / Year</th>
                                 <th className="pb-3 px-4">Target (Unique Visits)</th>
                                 <th className="pb-3 px-4">Achieved</th>
-                                <th className="pb-3 px-4">Achievement %</th>
                                 <th className="pb-3 px-4 text-right">Actions</th>
                             </tr>
                         </thead>
@@ -159,7 +188,18 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
 
                                 return (
                                     <tr key={monthStr} className="group hover:bg-slate-50/50 transition-colors">
-                                        <td className="py-4 px-4 font-semibold text-slate-800">{monthName}</td>
+                                        <td className="py-4 px-4 font-semibold text-slate-800">
+                                            {isEditing === docId ? (
+                                                <input 
+                                                    type="month"
+                                                    value={editMonth}
+                                                    onChange={e => setEditMonth(e.target.value)}
+                                                    className="w-36 p-1.5 border border-indigo-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-sm"
+                                                />
+                                            ) : (
+                                                monthName
+                                            )}
+                                        </td>
                                         <td className="py-4 px-4">
                                             {isEditing === docId ? (
                                                 <input 
@@ -174,20 +214,6 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
                                             )}
                                         </td>
                                         <td className="py-4 px-4 font-bold text-slate-700">{achieved}</td>
-                                        <td className="py-4 px-4">
-                                            <div className="flex items-center gap-3">
-                                                <span className={`font-bold ${percentage >= 100 ? "text-emerald-600" : percentage >= 50 ? "text-amber-500" : "text-rose-500"}`}>
-                                                    {percentage}%
-                                                </span>
-                                                <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                                    <motion.div 
-                                                        initial={{ width: 0 }}
-                                                        animate={{ width: `${Math.min(percentage, 100)}%` }}
-                                                        className={`h-full rounded-full ${percentage >= 100 ? "bg-emerald-500" : percentage >= 50 ? "bg-amber-400" : "bg-rose-500"}`}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </td>
                                         <td className="py-4 px-4 text-right">
                                             {isEditing === docId ? (
                                                 <div className="flex justify-end gap-2">
@@ -198,7 +224,7 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
                                                         Cancel
                                                     </button>
                                                     <button 
-                                                        onClick={() => handleSaveTarget(docId, activeTab, monthStr, editValue)}
+                                                        onClick={() => handleSaveTarget(docId, activeTab, monthStr, editMonth, editValue)}
                                                         className="text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-md shadow-sm"
                                                     >
                                                         Save
@@ -209,6 +235,7 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
                                                     onClick={() => {
                                                         setIsEditing(docId);
                                                         setEditValue(targetValue);
+                                                        setEditMonth(monthStr);
                                                     }}
                                                     className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 opacity-0 group-hover:opacity-100 transition-opacity bg-indigo-50 px-3 py-1.5 rounded-md"
                                                 >

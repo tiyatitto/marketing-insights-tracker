@@ -109,7 +109,6 @@ export default function AdminDashboard() {
                         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, onClick: () => setActiveTab("dashboard") },
                         { id: "reports", label: "Reports", icon: FileText, onClick: () => setActiveTab("reports") },
                         { id: "expense", label: "Expense Tracker", icon: DollarSign, onClick: () => setActiveTab("expense") },
-                        { id: "targets", label: "Targets", icon: TrendingUp, onClick: () => setActiveTab("targets") },
                         { id: "users", label: "User Management", icon: Users, onClick: () => setActiveTab("users") }
                     ]}
                 />
@@ -125,14 +124,9 @@ export default function AdminDashboard() {
                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent"></div>
                 </div>
             ) : (
-                <AnimatePresence mode="wait">
-            <motion.div 
+            <div 
                 key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="mx-auto max-w-7xl space-y-8"
+                className={`mx-auto max-w-7xl space-y-8 transition-opacity duration-200 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
             >
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                     <div>
@@ -151,21 +145,27 @@ export default function AdminDashboard() {
                                 : "Real-time overview of marketing activities and expenditures."}
                         </p>
                     </div>
-                    {/* ExportMenu relocated to specific tabs */}
                 </div>
 
                 {/* KPI Cards removed as per request */}
 
                 {activeTab === "dashboard" && (
-                    <AdminAnalytics reports={safeReports} />
+                    <div className="space-y-8">
+                        <AdminAnalytics reports={safeReports} />
+                        <AdminTargetTracking reports={safeReports} />
+                        
+                        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                            <div className="border-b border-slate-200 p-5 lg:p-6 flex items-center justify-between gap-4 bg-white">
+                                <h2 className="text-lg font-bold text-slate-900">Recent Reports</h2>
+                                <button onClick={() => setActiveTab("reports")} className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">View All</button>
+                            </div>
+                            <AdminReportTable reports={safeReports.slice(0, 10)} />
+                        </div>
+                    </div>
                 )}
-
-
 
                 {activeTab === "expense" && <ExpenseTracker reports={safeReports} isAdmin={true} />}
                 
-                {activeTab === "targets" && <AdminTargetTracking reports={safeReports} />}
-
                 {activeTab === "users" && <AdminUserManagement />}
                 
                 {activeTab === "reports" && (
@@ -184,8 +184,7 @@ export default function AdminDashboard() {
                         <AdminReportTable reports={filteredReports} />
                     </div>
                 )}
-            </motion.div>
-                </AnimatePresence>
+            </div>
             )}
         </DashboardLayout>
     );

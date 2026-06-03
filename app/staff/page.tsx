@@ -278,12 +278,8 @@ export default function StaffDashboard() {
                 ) : activeTab === "profile" ? (
                     <ProfileManagement key="profile" currentUser={user} />
                 ) : activeTab === "expense" ? (
-                    <motion.div 
+                    <div 
                         key="expense"
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20 }}
-                        transition={{ duration: 0.2 }}
                         className="mx-auto max-w-6xl space-y-6"
                     >
                         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -293,7 +289,7 @@ export default function StaffDashboard() {
                             </div>
                         </div>
                         <ExpenseTracker reports={safeReports} isAdmin={false} />
-                    </motion.div>
+                    </div>
                 ) : (
                     <motion.div 
                         key="create"

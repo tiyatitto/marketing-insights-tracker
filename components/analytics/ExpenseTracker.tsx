@@ -143,18 +143,14 @@ export function ExpenseTracker({ reports, isAdmin = false }: ExpenseTrackerProps
     };
 
     return (
-        <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="space-y-6"
-        >
-            {/* Sticky Advanced Filters */}
-            <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-xl rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-md flex flex-col xl:flex-row gap-4 items-center justify-between transition-all">
+        <div className="space-y-6">
+            {/* Advanced Filters */}
+            <div className="-mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-4 bg-slate-50 border-b border-slate-200 flex flex-col xl:flex-row gap-4 items-center justify-between transition-all">
                 <div className="flex items-center gap-2 text-slate-800 font-bold shrink-0">
-                    <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
+                    <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600 hidden xl:block">
                         <Filter className="w-5 h-5" />
                     </div>
-                    Smart Filters
+                    <span>Smart Filters</span>
                 </div>
                 
                 <div className="flex flex-wrap gap-3 w-full xl:w-auto items-center">
@@ -192,20 +188,6 @@ export function ExpenseTracker({ reports, isAdmin = false }: ExpenseTrackerProps
                     >
                         <RotateCcw className="w-5 h-5" />
                     </button>
-                    
-                    <div className="pl-2 border-l border-slate-200 ml-1">
-                        <ExportMenu 
-                            data={filteredReports} 
-                            filters={{
-                                fromDate: filterFromDate || "All",
-                                toDate: filterToDate || "All",
-                                month: filterMonth,
-                                activity: filterActivity,
-                                staff: filterMarketeer
-                            }} 
-                            filename={`Expense_Export_${new Date().toISOString().split("T")[0]}`}
-                        />
-                    </div>
                 </div>
             </div>
 
@@ -365,6 +347,6 @@ export function ExpenseTracker({ reports, isAdmin = false }: ExpenseTrackerProps
                     </motion.div>
                 </AnimatePresence>
             )}
-        </motion.div>
+        </div>
     );
 }

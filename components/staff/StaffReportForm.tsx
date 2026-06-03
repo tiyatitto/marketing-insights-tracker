@@ -56,6 +56,7 @@ export function StaffReportForm({ activityType, formData, handleInputChange, set
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
                         <FormField label="Institution Name" name="institution" value={formData.institution || ""} onChange={handleInputChange} />
                         <FormField label="Location" name="location" value={formData.location || ""} onChange={handleInputChange} />
+                        <FormField label="Date" type="date" name="date" min={minDate} max={maxDate} value={formData.date || ""} onChange={handleInputChange} />
                         <FormField label="Number of Students Attended" type="number" name="studentsAttended" value={formData.studentsAttended || ""} onChange={handleInputChange} />
                         <FormField label="Number of Students Registered" type="number" name="studentsRegistered" value={formData.studentsRegistered || ""} onChange={handleInputChange} />
                         <FormField label="Cost of Visit ($)" type="number" name="costOfVisit" value={formData.costOfVisit || ""} onChange={handleInputChange} />
@@ -70,6 +71,7 @@ export function StaffReportForm({ activityType, formData, handleInputChange, set
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
                         <FormField label="Conference Name" name="conferenceName" value={formData.conferenceName || ""} onChange={handleInputChange} />
                         <FormField label="Location" name="location" value={formData.location || ""} onChange={handleInputChange} />
+                        <FormField label="Date" type="date" name="date" min={minDate} max={maxDate} value={formData.date || ""} onChange={handleInputChange} />
                         <FormField label="Target Professionals" name="targetProfessionals" value={formData.targetProfessionals || ""} onChange={handleInputChange} />
                         <FormField label="Number of Participants" type="number" name="numParticipants" value={formData.numParticipants || ""} onChange={handleInputChange} />
                         <FormField label="Footfalls of Participants" type="number" name="footfalls" value={formData.footfalls || ""} onChange={handleInputChange} />

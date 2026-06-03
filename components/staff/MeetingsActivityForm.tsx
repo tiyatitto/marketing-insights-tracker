@@ -268,7 +268,7 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
             onFocus={() => setShowDropdown(true)}
             onKeyDown={handleKeyDown}
             placeholder={`Type to search or add new ${meetingType.toLowerCase()}...`}
-            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-medium relative z-50"
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-black placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-medium relative z-50"
           />
           <AnimatePresence>
               {showDropdown && searchQuery.trim().length > 0 && (
@@ -329,7 +329,7 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`p-5 bg-white/80 backdrop-blur-xl rounded-2xl border ${isProfileIncomplete ? 'border-amber-300 shadow-amber-100' : 'border-indigo-100'} shadow-md`}>
               <div className="flex justify-between items-start mb-4">
                   <div>
-                      <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                      <h3 className="text-lg font-bold text-black flex items-center gap-2">
                           <Building2 className="w-5 h-5 text-indigo-500" /> {formData.institutionName}
                           {isProfileIncomplete && (
                               <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full ml-2">Profile Incomplete</span>
@@ -342,10 +342,10 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
                   </button>
               </div>
               <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
-                  <div className="flex items-center gap-2 text-sm text-slate-700">
+                  <div className="flex items-center gap-2 text-sm text-black font-medium">
                       <CheckCircle2 className={`w-4 h-4 ${formData.numberOfStudents ? 'text-emerald-500' : 'text-slate-300'}`} /> {formData.numberOfStudents || 0} Students
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-slate-700">
+                  <div className="flex items-center gap-2 text-sm text-black font-medium">
                       <CheckCircle2 className={`w-4 h-4 ${formData.headOfInstitution ? 'text-emerald-500' : 'text-amber-500'}`} /> {formData.headOfInstitution || <span className="text-amber-500 italic">Missing Head</span>}
                   </div>
               </div>
@@ -383,7 +383,7 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`p-5 bg-white/80 backdrop-blur-xl rounded-2xl border ${isProfileIncomplete ? 'border-amber-300 shadow-amber-100' : 'border-cyan-100'} shadow-md`}>
               <div className="flex justify-between items-start mb-4">
                   <div>
-                      <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                      <h3 className="text-lg font-bold text-black flex items-center gap-2">
                           <Building2 className="w-5 h-5 text-cyan-600" /> {formData.hospitalName}
                           {isProfileIncomplete && (
                               <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full ml-2">Profile Incomplete</span>
@@ -396,10 +396,10 @@ export function MeetingsActivityForm({ formData, handleInputChange, setFormData 
                   </button>
               </div>
               <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
-                  <div className="flex items-center gap-2 text-sm text-slate-700">
+                  <div className="flex items-center gap-2 text-sm text-black font-medium">
                       <CheckCircle2 className={`w-4 h-4 ${formData.numberOfBeds ? 'text-emerald-500' : 'text-slate-300'}`} /> {formData.numberOfBeds || 0} Beds
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-slate-700">
+                  <div className="flex items-center gap-2 text-sm text-black font-medium">
                       <CheckCircle2 className={`w-4 h-4 ${formData.medicalSuperintendent ? 'text-emerald-500' : 'text-amber-500'}`} /> {formData.medicalSuperintendent || <span className="text-amber-500 italic">Missing Med. Supt.</span>}
                   </div>
               </div>
