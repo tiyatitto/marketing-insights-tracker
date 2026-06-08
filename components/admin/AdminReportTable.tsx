@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LayoutGrid, List } from "lucide-react";
 import CountUp from "react-countup";
+import { ReportDetailsModal } from "../ui/ReportDetailsModal";
 
 export interface AdminReport {
     id: string;
@@ -22,6 +23,7 @@ interface AdminReportTableProps {
 
 export function AdminReportTable({ reports }: AdminReportTableProps) {
     const [viewMode, setViewMode] = useState<"table" | "card">("table");
+    const [selectedReport, setSelectedReport] = useState<AdminReport | null>(null);
 
     const getActivityColor = (activity: string) => {
         const act = activity.toLowerCase();
@@ -75,7 +77,11 @@ export function AdminReportTable({ reports }: AdminReportTableProps) {
                             </thead>
                             <tbody className="divide-y divide-slate-100 bg-white">
                                 {reports.length > 0 ? reports.map((report) => (
-                                    <tr key={report.id} className="hover:bg-slate-50/50 transition-colors group">
+                                    <tr 
+                                        key={report.id} 
+                                        onClick={() => setSelectedReport(report)}
+                                        className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
+                                    >
                                         <td className="px-6 py-4 font-bold text-slate-900">{report.id}</td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
@@ -117,10 +123,11 @@ export function AdminReportTable({ reports }: AdminReportTableProps) {
                     >
                         {reports.length > 0 ? reports.map((report) => (
                             <motion.div 
+                                onClick={() => setSelectedReport(report)}
                                 whileHover={{ y: -8, scale: 1.02 }}
                                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
                                 key={report.id} 
-                                className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-xl hover:shadow-indigo-500/10 transition-all flex flex-col relative overflow-hidden"
+                                className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-xl hover:shadow-indigo-500/10 transition-all flex flex-col relative overflow-hidden cursor-pointer"
                             >
                                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 opacity-50"></div>
                                 <div className="flex justify-between items-start mb-4 mt-2">
@@ -166,6 +173,11 @@ export function AdminReportTable({ reports }: AdminReportTableProps) {
                     </motion.div>
                 )}
             </AnimatePresence>
+            <ReportDetailsModal 
+                isOpen={!!selectedReport}
+                onClose={() => setSelectedReport(null)}
+                report={selectedReport}
+            />
         </div>
     );
 }

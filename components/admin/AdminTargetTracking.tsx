@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { db } from "../../lib/firebase";
 import { collection, query, onSnapshot, doc, setDoc } from "firebase/firestore";
-import { Target, TrendingUp, Hospital, Building2 } from "lucide-react";
-import { motion } from "framer-motion";
+import { Target, Hospital, Building2 } from "lucide-react";
 
 interface MonthlyTarget {
     id: string; // e.g., "Institution_2026_06"
@@ -23,7 +22,6 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
         const unsubscribe = onSnapshot(q, async (snapshot) => {
             if (snapshot.empty) {
                 // Auto-seed predefined targets
-                console.log("Seeding targets...");
                 const year = new Date().getFullYear();
                 const defaultTargets = [
                     { id: `Institution_${year}_01`, type: "Institution", month: `${year}-01`, target: 20 },
@@ -55,33 +53,28 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
         return () => unsubscribe();
     }, []);
 
-    const [isEditing, setIsEditing] = useState<string | null>(null);
+    const [editingCell, setEditingCell] = useState<string | null>(null);
     const [editValue, setEditValue] = useState<number>(0);
-    const [editMonth, setEditMonth] = useState<string>("");
 
-    const handleSaveTarget = async (oldDocId: string, type: "Institution" | "Hospital", oldMonthStr: string, newMonthStr: string, targetValue: number) => {
+    const handleSaveTarget = async (docId: string, monthStr: string, targetValue: number) => {
         try {
-            const newDocId = `${type}_${newMonthStr}`;
-            
-            // If they changed the month, we create a new doc and delete the old one IF the old one actually existed in DB
-            if (oldDocId !== newDocId) {
-                // Check if old doc exists in targets array
-                const oldExists = targets.find(t => t.id === oldDocId);
-                if (oldExists) {
-                    await deleteDoc(doc(db, "monthlyTargets", oldDocId));
-                }
-            }
-            
-            await setDoc(doc(db, "monthlyTargets", newDocId), {
-                type,
-                month: newMonthStr,
+            await setDoc(doc(db, "monthlyTargets", docId), {
+                type: activeTab,
+                month: monthStr,
                 target: targetValue
             }, { merge: true });
-            
-            setIsEditing(null);
+            setEditingCell(null);
         } catch (error) {
             console.error("Error saving target:", error);
             alert("Failed to save target.");
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent, docId: string, monthStr: string) => {
+        if (e.key === "Enter") {
+            handleSaveTarget(docId, monthStr, editValue);
+        } else if (e.key === "Escape") {
+            setEditingCell(null);
         }
     };
 
@@ -105,34 +98,25 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
             return isCorrectType && (matchesMonth || matchesEventDate);
         });
 
-        // Unique organizations only
-        const uniqueOrgs = new Set();
-        filtered.forEach(r => {
-            const orgId = r.formData?.organizationId || r.institution;
-            if (orgId) uniqueOrgs.add(orgId);
-        });
-
-        return uniqueOrgs.size;
+        // Total visits instead of unique organizations
+        return filtered.length;
     };
 
-    // Combine months from DB + ensure current and next 3 months are visible
-    const monthsSet = new Set<string>();
     const filteredTargets = targets.filter(t => t.type === activeTab);
-    filteredTargets.forEach(t => monthsSet.add(t.month));
 
+    // Generate strict 7-month rolling window (current - 3 months to current + 3 months)
+    const monthsList: string[] = [];
     const d = new Date();
-    // Previous 2 months for context
-    d.setMonth(d.getMonth() - 2);
-    for (let i = 0; i < 6; i++) {
+    d.setMonth(d.getMonth() - 3);
+    for (let i = 0; i < 7; i++) {
         const year = d.getFullYear();
         const month = String(d.getMonth() + 1).padStart(2, '0');
-        monthsSet.add(`${year}-${month}`);
+        monthsList.push(`${year}-${month}`);
         d.setMonth(d.getMonth() + 1);
     }
 
-    // Sort months chronologically
-    const monthsList = Array.from(monthsSet).sort();
-    
+    const currentMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
     return (
         <div className="bg-white/80 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="border-b border-slate-200 p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -142,7 +126,7 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
                     </div>
                     <div>
                         <h2 className="text-lg font-bold text-slate-900">Target vs Achievement</h2>
-                        <p className="text-xs text-slate-500 font-medium">Track unique visits against monthly goals</p>
+                        <p className="text-xs text-slate-500 font-medium">Track total visits against monthly goals</p>
                     </div>
                 </div>
 
@@ -170,9 +154,8 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
                         <thead>
                             <tr className="border-b border-slate-200 text-sm font-bold text-slate-500 uppercase tracking-wider">
                                 <th className="pb-3 px-4">Month / Year</th>
-                                <th className="pb-3 px-4">Target (Unique Visits)</th>
-                                <th className="pb-3 px-4">Achieved</th>
-                                <th className="pb-3 px-4 text-right">Actions</th>
+                                <th className="pb-3 px-4 w-48">Target</th>
+                                <th className="pb-3 px-4">No. of Visits Achieved</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -181,67 +164,55 @@ export function AdminTargetTracking({ reports }: { reports: any[] }) {
                                 const targetObj = filteredTargets.find(t => t.id === docId);
                                 const targetValue = targetObj?.target || 0;
                                 const achieved = getAchievedCount(activeTab, monthStr);
-                                const percentage = targetValue > 0 ? Math.round((achieved / targetValue) * 100) : 0;
                                 
                                 const [year, monthNum] = monthStr.split("-");
                                 const monthName = new Date(parseInt(year), parseInt(monthNum) - 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+                                const isCurrentMonth = monthStr === currentMonthStr;
 
                                 return (
-                                    <tr key={monthStr} className="group hover:bg-slate-50/50 transition-colors">
+                                    <tr 
+                                        key={monthStr} 
+                                        className={`transition-colors ${isCurrentMonth ? "bg-indigo-50/50 border-l-4 border-indigo-500" : "hover:bg-slate-50/50 border-l-4 border-transparent"}`}
+                                    >
                                         <td className="py-4 px-4 font-semibold text-slate-800">
-                                            {isEditing === docId ? (
-                                                <input 
-                                                    type="month"
-                                                    value={editMonth}
-                                                    onChange={e => setEditMonth(e.target.value)}
-                                                    className="w-36 p-1.5 border border-indigo-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-sm"
-                                                />
-                                            ) : (
-                                                monthName
-                                            )}
+                                            <div className="flex items-center gap-2">
+                                                {monthName}
+                                                {isCurrentMonth && (
+                                                    <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 rounded-md">
+                                                        Current Month
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
-                                        <td className="py-4 px-4">
-                                            {isEditing === docId ? (
+                                        <td 
+                                            className="py-4 px-4 cursor-pointer group"
+                                            onDoubleClick={() => {
+                                                setEditingCell(docId);
+                                                setEditValue(targetValue);
+                                            }}
+                                            title="Double click to edit"
+                                        >
+                                            {editingCell === docId ? (
                                                 <input 
                                                     type="number" 
                                                     value={editValue}
                                                     onChange={e => setEditValue(Number(e.target.value))}
-                                                    className="w-24 p-1.5 border border-indigo-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                                                    onBlur={() => handleSaveTarget(docId, monthStr, editValue)}
+                                                    onKeyDown={(e) => handleKeyDown(e, docId, monthStr)}
+                                                    className="w-24 p-1.5 border border-indigo-400 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-800 bg-white shadow-sm"
                                                     autoFocus
                                                 />
                                             ) : (
-                                                <span className="font-bold text-slate-700">{targetValue}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-slate-700">{targetValue}</span>
+                                                    <span className="opacity-0 group-hover:opacity-100 text-[10px] text-indigo-500 font-semibold uppercase tracking-wider transition-opacity">
+                                                        Double-click to edit
+                                                    </span>
+                                                </div>
                                             )}
                                         </td>
-                                        <td className="py-4 px-4 font-bold text-slate-700">{achieved}</td>
-                                        <td className="py-4 px-4 text-right">
-                                            {isEditing === docId ? (
-                                                <div className="flex justify-end gap-2">
-                                                    <button 
-                                                        onClick={() => setIsEditing(null)}
-                                                        className="text-xs font-semibold text-slate-500 hover:text-slate-700 bg-slate-100 px-3 py-1.5 rounded-md"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => handleSaveTarget(docId, activeTab, monthStr, editMonth, editValue)}
-                                                        className="text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-md shadow-sm"
-                                                    >
-                                                        Save
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <button 
-                                                    onClick={() => {
-                                                        setIsEditing(docId);
-                                                        setEditValue(targetValue);
-                                                        setEditMonth(monthStr);
-                                                    }}
-                                                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 opacity-0 group-hover:opacity-100 transition-opacity bg-indigo-50 px-3 py-1.5 rounded-md"
-                                                >
-                                                    Set Target
-                                                </button>
-                                            )}
+                                        <td className="py-4 px-4 font-bold text-slate-700">
+                                            {achieved}
                                         </td>
                                     </tr>
                                 );
